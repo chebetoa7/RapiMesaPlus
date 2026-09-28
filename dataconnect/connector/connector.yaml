@@ -1,0 +1,9 @@
+connectorId: restaurante-connector
+generate:
+  javascriptSdk:
+    outputDir: ../../api/src/dataconnect
+    package: "@restaurante/dataconnect"
+  adminNodeSdk:
+    - outputDir: ../../api/src/dataconnect-admin-generated
+      package: "@dataconnect/admin-generated"
+      packageJsonDir: ../../api

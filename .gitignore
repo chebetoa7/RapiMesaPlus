@@ -1,0 +1,20 @@
+# API and Node
+node_modules/
+api/node_modules/
+dist/
+api/dist/
+.env
+api/.env
+api/key/
+*.log
+
+# MAUI / .NET
+[Bb]in/
+[Oo]bj/
+*.userprefs
+*.user
+*.suo
+.vs/
+
+# Mac
+.DS_Store

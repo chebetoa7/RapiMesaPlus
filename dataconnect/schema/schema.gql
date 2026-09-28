@@ -1,0 +1,74 @@
+type User @table {
+  id: String! @col(name: "user_id")
+  name: String!
+  email: String!
+  role: String! 
+  phone: String
+  restaurantId: String
+  subscriptionPlanId: UUID
+  adminId: String
+}
+
+type Restaurant @table {
+  id: UUID! @default(expr: "uuidV4()")
+  name: String!
+  logoUrl: String
+  admin: User! 
+  tableCount: Int!
+}
+
+type Table @table {
+  id: UUID! @default(expr: "uuidV4()")
+  restaurant: Restaurant!
+  identifier: String!
+  status: String! 
+}
+
+type Order @table {
+  id: UUID! @default(expr: "uuidV4()")
+  restaurant: Restaurant!
+  waiter: User!
+  table: Table!
+  status: String! 
+  totalAmount: Float!
+  comments: String
+  incidents: String
+  createdAt: Timestamp! @default(expr: "request.time")
+  closedAt: Timestamp
+}
+
+type OrderItem @table {
+  id: UUID! @default(expr: "uuidV4()")
+  order: Order!
+  productId: String!
+  name: String!
+  quantity: Int!
+  price: Float!
+}
+
+type MenuCategory @table {
+  id: UUID! @default(expr: "uuidV4()")
+  restaurant: Restaurant!
+  name: String!
+  iconUrl: String
+  sortOrder: Int!
+}
+
+type MenuItem @table {
+  id: UUID! @default(expr: "uuidV4()")
+  category: MenuCategory!
+  name: String!
+  description: String
+  price: Float!
+  imageUrl: String
+  isAvailable: Boolean! @default(expr: "true")
+}
+
+type SubscriptionPlan @table {
+  id: UUID! @default(expr: "uuidV4()")
+  name: String!
+  pricePerMonth: Float!
+  maxRestaurants: Int!
+  maxWaiters: Int!
+  maxTables: Int!
+}

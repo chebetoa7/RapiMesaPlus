@@ -1,0 +1,59 @@
+# RestauranteApp - Proyecto Sistema POS & Mesero Virtual
+Este archivo sirve como punto de restauración (contexto) para que cualquier otro equipo o entorno entienda exactamente en qué punto se encuentra el proyecto, cómo está construido, y qué pasos siguen.
+
+## 1. Resumen del Proyecto
+El sistema es un Punto de Venta (POS) en la nube diseñado bajo un modelo de suscripción (SaaS). Se vende a cadenas de restaurantes. Cuenta con distintos roles:
+- **Admin**: Dueño del sistema (Dios), crea a los gerentes de restaurantes.
+- **Restaurant Admin**: Dueño/Gerente de una franquicia. Puede administrar sus sucursales y sus meseros, restringido a los límites de su suscripción.
+- **Waiter (Mesero / Tablet Virtual)**: Personal o dispositivo empotrado en la mesa que levanta comandas.
+
+## 2. Tecnologías Utilizadas
+- **Backend**: Node.js + Express + TypeScript.
+- **Base de Datos**: PostgreSQL alojado en Google Cloud SQL y orquestado mediante **Firebase Data Connect** (usa GraphQL para conectarse).
+- **Autenticación**: Firebase Authentication (Identity Toolkit + Firebase Admin SDK) manejando JWT y Custom Claims para Roles (RBAC).
+- **Frontend / Móvil**: .NET MAUI (C# / XAML).
+
+## 3. Estado Actual (Lo que ya está construido)
+
+### A. Base de Datos (Schema)
+Todas las tablas están creadas, vinculadas y en producción:
+1. `User`: Maneja cuentas, contiene `role`, `adminId` y `subscriptionPlanId`.
+2. `Restaurant`: Sucursales del restaurante.
+3. `Table`: Mesas o dispositivos (Mesero Virtual).
+4. `SubscriptionPlan`: Planes del sistema (Free, Express, Full, Premium).
+5. `MenuCategory` & `MenuItem`: Categorías y productos del menú.
+6. `Order` & `OrderItem`: Manejo de las cuentas/tickets y el detalle de lo que pide cada mesa.
+
+### B. Backend API (http://localhost:3000)
+- Rutas seguras que validan el token de Firebase.
+- Lógica de monetización: Bloquea la creación de restaurantes o meseros si el `restaurant_admin` ha excedido el límite de su paquete activo.
+- **Swagger Integrado**: Documentación interactiva disponible en `http://localhost:3000/api-docs` con endpoints para realizar operaciones CRUD sobre todas las entidades mencionadas.
+- Contiene su SDK auto-generado de Data Connect (`@dataconnect/admin-generated`).
+
+### C. App MAUI (Fase A y B Completadas)
+- Navegación moderna con `AppShell.xaml`.
+- Pantalla de inicio de sesión conectada al enrutamiento correcto (`Shell.Current.GoToAsync`).
+- `MenuCategoriesPage.xaml`: Interfaz visual (UI) replicando el diseño elegante en blanco/naranja/gris oscuro. Contiene una barra lateral para las categorías y tarjetas flotantes redondeadas.
+
+## 4. Instrucciones para Arrancar (En una nueva Mac)
+1. **Requisitos**: Instalar Node.js, `.NET 9/10 SDK`, `Firebase CLI` (vía `npm install -g firebase-tools`).
+2. **Backend**:
+   - `cd api`
+   - `npm install`
+   - Asegurarse de tener el archivo `.env` configurado con `FIREBASE_API_KEY=AIza...`.
+   - Asegurarse de tener la carpeta `/api/key/credential.json` con la llave de cuenta de servicio de Firebase.
+   - Correr: `npm run dev` (o `npx tsc && node dist/index.js`).
+3. **Data Connect (Base de datos)**:
+   - Ya está migrada en la nube, pero si cambias algo en `schema.gql`, ejecuta:
+     `firebase dataconnect:sql:migrate --force`
+     `firebase dataconnect:sdk:generate`
+     `firebase deploy --only dataconnect`
+4. **App MAUI**:
+   - Abrir el proyecto `RapiMesaApp` en tu IDE (VS Code / Rider / Visual Studio for Mac / Xcode).
+   - Compilar y correr en el simulador de iOS o Android.
+
+## 5. Próximos Pasos (Lo que sigue: Fase C)
+1. **Conectar MAUI al Backend**: Reemplazar los datos duros (mock data) de `MenuCategoriesPage` para que haga peticiones `HTTP GET` a nuestra API Node (`/api/menu/restaurant/{restaurantId}`) y muestre las categorías reales.
+2. **Pantalla de Productos (MenuItems)**: Al tocar una categoría en MAUI, mostrar la cuadrícula de platillos con precio y botón de "Agregar".
+3. **Carrito / Ticket Virtual**: Crear el panel lateral o ventana emergente donde se vea la orden actual (`Order`), sumar los totales, y enviar un `POST` a `/api/orders` para registrarlo en la base de datos de la cocina.
+4. **Modo Kiosko**: Adaptar un flag para que si es un "Mesero Virtual", el iPad se quede bloqueado solo viendo el menú de su mesa correspondiente.

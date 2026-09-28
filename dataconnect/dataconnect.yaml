@@ -1,0 +1,11 @@
+specVersion: "v1alpha"
+serviceId: "restaurante-app-sql"
+location: "us-east1"
+schema:
+  source: "./schema"
+  datasource:
+    postgresql:
+      database: "fdc"
+      cloudSql:
+        instanceId: "api-fdc"
+connectorDirs: ["./connector"]

@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewmodels="clr-namespace:RapiMesaApp.ViewModels"
+             x:Class="RapiMesaApp.LoginPage"
+             x:DataType="viewmodels:LoginViewModel"
+             BackgroundColor="#222428"
+             Shell.NavBarIsVisible="False">
+
+    <ScrollView>
+        <VerticalStackLayout Spacing="20" Padding="30,60,30,30" VerticalOptions="Center" BackgroundColor="#222428">
+
+            <!-- Logo -->
+           <Border StrokeShape="RoundRectangle 0" BackgroundColor="#222428"> 
+                <Image Source="gemini_svg.svg"
+                    BackgroundColor="#222428"
+                   SemanticProperties.Description="Logo de RapiMesa"
+                   HeightRequest="220"
+                   HorizontalOptions="Center"
+                   Margin="0,0,0,20"/>
+            </Border>
+
+            <!-- Formulario de Login usando Border en lugar de Frame -->
+            <Border BackgroundColor="#2D2F35" 
+                    Padding="0" 
+                    Stroke="#444"
+                    StrokeThickness="1">
+                
+                <Border.Shadow>
+                    <Shadow Brush="Black" Offset="0,4" Radius="10" Opacity="0.3" />
+                </Border.Shadow>
+                
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="12" />
+                </Border.StrokeShape>
+                
+                <VerticalStackLayout Spacing="0">
+                    
+                    <Entry Text="{Binding Restaurante}"
+                           Placeholder="ID Restaurante (Ej: burger-01)"
+                           PlaceholderColor="#888" 
+                           TextColor="White"
+                           Margin="15,10"
+                           ClearButtonVisibility="WhileEditing"/>
+                    
+                    <BoxView HeightRequest="1" Color="#444" />
+                    
+                    <Entry Text="{Binding Usuario}"
+                           Placeholder="Usuario / Email"
+                           PlaceholderColor="#888" 
+                           TextColor="White"
+                           Margin="15,10"
+                           ClearButtonVisibility="WhileEditing"/>
+                           
+                    <BoxView HeightRequest="1" Color="#444" />
+                    
+                    <Entry Text="{Binding Password}"
+                           Placeholder="Contraseña" 
+                           IsPassword="True"
+                           PlaceholderColor="#888" 
+                           TextColor="White"
+                           Margin="15,10"
+                           ClearButtonVisibility="WhileEditing"/>
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Botón Login -->
+            <Button Text="Iniciar Turno"
+                    Command="{Binding LoginCommand}"
+                    BackgroundColor="#F16821" 
+                    TextColor="White"
+                    FontAttributes="Bold"
+                    FontSize="18"
+                    CornerRadius="10"
+                    HeightRequest="55"
+                    Margin="0,15,0,0"/>
+
+            <!-- Botón Registrar -->
+            <Button Text="Registrarte"
+                    Command="{Binding RegisterCommand}"
+                    BackgroundColor="Transparent"
+                    TextColor="#F9A11F"
+                    FontAttributes="Bold"
+                    FontSize="16"
+                    CornerRadius="10"
+                    HeightRequest="55"/>
+
+            <!-- Versión -->
+            <Label Text="{Binding AppVersion}"
+                   TextColor="#666"
+                   FontSize="12"
+                   HorizontalOptions="Center"
+                   Margin="0, 40, 0, 0" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
