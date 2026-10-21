@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Capability de Push Notifications (APNs).
+
+	  Sin este entitlement, FCM no puede registrar el token en un iPhone o
+	  iPad real: el alta contra APNs falla con
+	  "Invalid fetch response, expected 'token' or 'Error' key".
+
+	  'development' sirve para las builds de depuración (con perfil de
+	  desarrollo). Para App Store hay que cambiarlo a 'production' o, mejor,
+	  usar el binario de distribución de APNs.
+	-->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

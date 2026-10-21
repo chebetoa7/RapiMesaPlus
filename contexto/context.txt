@@ -1,0 +1,672 @@
+# RapiMesa — Contexto de Proyecto (documento de traspaso entre IAs)
+
+> **Propósito de este archivo:** que cualquier IA o persona que abra el repositorio
+> en frío entienda **qué es el producto, cómo está construido, qué funciona hoy,
+> qué está roto y por dónde seguir**, sin tener que reconstruir el estado a mano.
+>
+> Regla de oro: lo que está aquí debe ser **verificable en el código**. Si una
+> afirmación de la sección 3 no se puede comprobar con `grep`/`curl`/`dart analyze`,
+> está mal puesta.
+>
+> `contexto/context_original.txt` conserva el manifiesto fundacional del proyecto
+> (idéntico al `context.txt` del commit inicial). El historial de tareas vive al
+> final de este archivo, en la sección 8.
+
+---
+
+## 1. Qué es el producto
+
+**RapiMesa** es un **Punto de Venta en la nube con modelo SaaS multi-tenant**, para
+cadenas de restaurantes. No es una app de(compiler) para restaurantes: es
+**software que reemplaza la labor del mesero**.
+
+### 1.1 El modelo dual (lo más importante de este proyecto)
+
+**Una sola app, un solo binario, con DOS perspectivas simultáneas:**
+
+| Perspectiva | Quién la usa | Qué hace |
+|---|---|---|
+| **Mesero** | Personal, con el dispositivo en la mano | Levanta comanda, monitorea mesas, cobra |
+| **Mesa Virtual** | El comensal, en la tablet fija de la mesa | Se autosirve: carta, pedido, cuenta, pago |
+
+Las dos perspectivas viven en el **mismo aparato** y son **intercambiables**:
+si el mesero toma la tablet, opera como mesero; si la toma el comensal, la mesa
+se atiende sola. Por eso el mismo código sirve para:
+
+- **Tablet fija en la mesa** → perspectiva "Mesa Virtual" (autoservicio).
+- **Teléfono en la mano del mesero** → perspectiva "Mesero".
+- **Tablet en la mano del mesero** → cualquiera de las dos.
+
+Plataformas objetivo: **iOS, Android, iPad, tablet**. La web tiene **dos**
+propósitos distintos: la landing comercial (con autorregistro) y la build web
+de la app.
+
+### 1.2 Roles
+
+| Rol | Dónde vive | Qué puede |
+|---|---|---|
+| `super_admin` | Claim + `User.role` | Dueño del SaaS. Ve el panel global (MRR, tenants) |
+| `restaurant_admin` | Claim + `User.role` | Dueño de una franquicia. Panel de su restaurante |
+| `waiter` | Claim + `User.role` | Mesero físico **o** tablet de mesa (ambos levantan comanda) |
+| `kitchen` | Claim + `User.role` | Cocinero. Entra directo al KDS |
+
+La **fuente autoritativa del rol** son los **Custom Claims de Firebase Auth**.
+`User.role` en PostgreSQL es la copia de negocio. **Nunca** se decide el rol por
+heurísticas sobre el correo (esa regla se aplicó explícitamente en el pasado:
+`juan@gmail.com`, `azul@empresa.com`, etc. son válidos).
+
+### 1.3 Modelo comercial
+
+4 planes sembrados en `SubscriptionPlan`: `free` (maxWaiters 3 / maxAdmins 1),
+`express` (15/2, $29), `full` (50/5, $89), `premium` (999/999, $199).
+
+`maxWaiters` cubre **tanto** a meseros físicos con dispositivo en mano como a
+tablets fijas de mesa: ambos cumplen la función de levantar la comanda, así que
+cada "punto operativo" consume un cupo.
+
+---
+
+## 2. Arquitectura y dónde vive cada cosa
+
+```
+RapiMesaFlutter/            App Flutter (19 archivos .dart, ~11.900 LOC)
+  lib/core/config/api_config.dart      URL base de la API (--dart-define)
+  lib/core/services/api_client.dart    HTTP centralizado + token de Firebase
+  lib/core/services/push_notification_service.dart
+  lib/features/auth/presentation/login_page.dart
+  lib/features/menu/presentation/menu_categories_page.dart      (Mesa Virtual / Mesero)
+  lib/features/kitchen/presentation/kitchen_view.dart           (KDS)
+  lib/features/admin/presentation/admin_floor_view.dart         (Piso, cobro)
+  lib/features/admin/presentation/restaurant_admin_dashboard_view.dart
+  lib/features/admin/presentation/restaurant_menu_management_view.dart
+  lib/features/admin/presentation/super_admin_view.dart
+  lib/features/order/providers/restaurant_orders_manager.dart   (núcleo de estado)
+  lib/features/order/presentation/widgets/active_order_sheet.dart  (cuenta de la mesa)
+  lib/features/order/presentation/widgets/order_summary_sheet.dart
+  lib/features/order/presentation/widgets/dish_detail_sheet.dart
+
+DataConnect/api/            Backend Node + Express + TypeScript
+  src/app.ts                App Express (sin listen) — comparte con Cloud Function
+  src/index.ts              Entry local (listen) — `npm run dev`
+  src/function.ts           Export de la Cloud Function (`onRequest`)
+  src/firebase.ts           Credenciales: archivo SA → GOOGLE_APPLICATION_CREDENTIALS → CLI → ADC
+  src/middlewares/auth.middleware.ts   verifyFirebaseToken, requireRole, requireAdmin, requireKitchen
+  src/routes/{auth,orders,menu,restaurant,user,table}.routes.ts
+  src/services/push.service.ts         FCM: topics + multicast
+  public/index.html         Landing comercial (942 líneas)
+
+DataConnect/dataconnect/    Schema + connector de Firebase Data Connect
+  dataconnect/schema/schema.gql        8 tablas (User, Restaurant, Table, Order,
+                                        OrderItem, MenuCategory, MenuItem, SubscriptionPlan)
+  dataconnect/connector/queries.gql    Queries GraphQL del SDK Admin
+  dataconnect/connector/mutations.gql
+
+firebase.json               dataconnect + functions (DataConnect/api) + hosting
+contexto/                   Este documento + el manifiesto original
+RapiMesaApp/                Legacy .NET MAUI (conservado, ya no se toca)
+```
+
+### 2.1 Firebase (verificado)
+
+- **Proyecto:** `restaurantapp-3007c` (cuenta `chebetoa7@gmail.com`)
+- **Data Connect:** servicio `restaurante-app-sql`, región **us-east1**,
+  Cloud SQL `api-fdc` / base `fdc`, schema actualizado 2026-10-14,
+  connector `restaurante-connector`
+- **Hosting:** site `restaurantapp-3007c` → `https://restaurantapp-3007c.web.app`
+  - `/` → landing comercial
+  - `/app/` → build web de Flutter (`--base-href /app/`)
+- **Functions:** ⚠️ **ninguna desplegada todavía** (ver 3.2)
+- **Plan de facturación: Spark (gratis).** Hosting funciona; **Cloud Functions exige Blaze**.
+
+### 2.2 Tablas (schema.gql, 83 líneas)
+
+`User` (role, restaurantId, adminId, subscriptionPlanId) · `Restaurant` (admin, tableCount)
+· `Table` (identifier, status) · `Order` (orderType, customerName/Phone, mesa nullable,
+timestamps de auditoría) · `OrderItem` (extras, kitchenNotes) · `MenuCategory` ·
+`MenuItem` (isAvailable) · `SubscriptionPlan` (maxRestaurants/maxAdmins/maxWaiters/maxTables).
+
+---
+
+## 3. Estado real: qué funciona y qué no
+
+### 3.1 ✅ Verificado y funcionando
+
+| Área | Evidencia |
+|---|---|
+| **Compilación TypeScript** | `npm run build` → **0 errores**. El proyecto antes **no compilaba** (20 errores TS) porque los imports del SDK autogenerado usaban rutas relativas que saltaban la resolución del paquete |
+| **Tipos del SDK** | 3 queries corregidas y SDK regenerado. Antes `Restaurant.adminId`, `User.subscriptionPlanId` y `MenuCategory.restaurantId` **nunca se elegían**, así que 3 comportamientos documentados no funcionaban: la búsqueda de restaurante por admin, el nombre/plan/cuota del admin en `/profile`, y el push de menú cuando el cliente no manda `restaurantId` |
+| **Autenticación de la API** | `router.use(verifyFirebaseToken)` estaba **después** de las 15 rutas `/sync`. Ahora toda la API de pedidos/cobros/CLABE/comprobantes exige token. `POST /auth/create-waiter` acepta **cualquier rol** desde el body → **escalada a `super_admin`**; ahora exige rol de administrador y deriva `role`/`restaurantId` de los claims |
+| **Cliente: token y URL** | 29 URLs hardcodeadas (`localhost`/`127.0.0.1`/`10.0.2.2`) en 6 archivos → centralizadas en `ApiConfig` + `ApiClient`, que adjunta el token de Firebase. `dart analyze lib/` → **0 errores** |
+| **Regresión de estado `paid`** | El poll remoto degradaba una comanda pagada a `delivered`, re-bloqueando la mesa y borrando la venta del corte de caja. Ahora `paid` es terminal en el merge |
+| **Colisión de IDs de comanda** | `ORD-${millisecondsSinceEpoch.substring(7)}` dejaba 6 dígitos → colisión cada ~16 min; el backend sobrescribía una comanda con otra. Ahora ID con microsegundos + aleatorio |
+| **Cobro "falso"** | `payAndCloseOrder/Table` devolvían `true` aunque los 3 endpoints fallaran → la UI anunciaba "cobrada con éxito" sin persistir. Ahora devuelven el resultado real y la UI lo dice |
+| **Error de servidor ≠ producto borrado** | El backend devolvía 200 con `exists:false` en errores internos de Data Connect → la app **borraba el platillo del menú**. Ahora se distingue |
+| **Recursos del manager** | `RestaurantOrdersManager` no tenía `dispose()` → sus 2 timers nunca se cancelaban. Corregido |
+| **Landing + web en producción** | `https://restaurantapp-3007c.web.app` (landing) y `/app/` (app web) sirviendo correctamente |
+| **Service worker de FCM** | Copiado a la **raíz** del site (el SDK JS lo busca en `/firebase-messaging-sw.js`), no solo en `/app/` |
+| **Aviso de falta de conexión** | La app **ya no traga el error**: si la API no responde, muestra un banner ámbar "Sin conexión con el servidor — mostrando menú de ejemplo", con las URLs probadas, botón "Reintentar" e instrucción del `--dart-define`. Antes el fallo era invisible y se confundía con "el restaurante no tiene productos" |
+| **Fallback del UID eliminado** | `login_page.dart` usaba el **UID de Firebase como restaurantId** cuando la consulta al perfil fallaba. Ese valor no es un UUID, el backend respondía **500** (`$restaurantId is invalid UUID`) y el menú se quedaba vacío (solo el agua gratis) **sin explicar por qué**. Ahora el identificador del restaurante nunca se inventa: si el perfil no se resuelve, la pantalla de menú lo reintenta y, si no puede, lo muestra en el banner. Además el perfil se consulta con **un reintento** (la primera llamada tras arrancar el backend puede agotar el tiempo de espera por la conexión fría a Cloud SQL) |
+| **Errores de la API visibles** | Las respuestas distintas de 200 se registran en el banner con el mensaje real del backend (`_extractApiError`). Los `debugPrint('[MENU-FETCH] ...')` se dejaron a propósito: son la vía más rápida para diagnosticar esta clase de fallo |
+| **Rol resuelto desde los claims *o* desde la BD** | `requireRole` (backend) ahora determina el rol en este orden: **(1) Custom Claims del token, (2) columna `User.role` de Cloud SQL**, con caché de 60 s. Nunca del cuerpo de la petición. Antes, si un token no traía claim, la ruta respondía 401 aunque el usuario tuviera un rol válido en la base de datos |
+| **`requireRole` verifica el token si hace falta** | Este middleware puede ser el único control de acceso de una ruta (menú, alta de personal), así que si `req.user` no está, verifica el JWT él mismo. Sin esto, esas rutas respondían 401 aunque el cliente enviara un token válido |
+| **Reintento con token refrescado** | `ApiClient` reintenta una sola vez con `getIdToken(forceRefresh: true)` cuando la respuesta es 401 o 403. Los Custom Claims viven dentro del token: si se cambian en el servidor, el token cacheado en el navegador sigue llevando el rol viejo |
+| **Script de sincronización de claims** | `npm run sync:claims` (informe) y `npm run sync:claims -- --fix` (corrige) alinean los Custom Claims de Firebase Auth con `User.role` de Cloud SQL. Encontró y corrigió **2 administradores sin claims**: `sebastian0@gmail.com` y `victor@coffee.com` |
+| **El rol 'admin' es alias de 'super_admin'** | Las cuentas del dueño del SaaS tienen `role = 'admin'` en la base de datos, no `'super_admin'`. Los middlewares aceptan ambos nombres |
+
+### 3.1.c Push Notification: lo que estaba roto
+
+| # | Defecto | Corrección |
+|---|---|---|
+| P1 | **Dos registros de dispositivos distintos.** `register-device` llenaba el array del servicio (`registeredDeviceTokens`), pero `sendPushNotification` filtraba el array local de `order.routes.ts` (`registeredDevices`), que **nunca se llenaba**. Resultado: los push de `new_order` y `staff_call` **no llegaban a nadie** | `sendPushNotification` usa ahora el registro del servicio |
+| P2 | **`notifyMenuUpdated` solo publicaba en `_tables` con filtro `{role:'table'}`**, así que a los meseros y a los dispositivos web (que no pueden suscribirse a tópicos desde el cliente) nunca les llegaba | Publica en `_tables` **y** `_waiters`, con filtro `{role:'all'}` (sigue filtrando por restaurante) |
+| P3 | **`onStaffCall` estaba declarado y nunca se asignaba**: el push "Llamar Mesero" llegaba al dispositivo y la app lo descartaba en silencio | Asignado en `menu_categories_page.dart`, con aviso en pantalla. Además se añadió la rama `staff_call` en `onMessageOpenedApp` |
+| P4 | **Los callbacks de push son slots globales de un singleton**, y el `dispose()` los ponía a `null`: si la pantalla de menú estaba apilada sobre otra, la de abajo dejaba de recibir push para siempre | Se guardan los handlers previos y se **restauran** al salir |
+| P5 | **El token FCM solo se registraba al abrir el menú**, así que un dispositivo sin sesión iniciada nunca quedaba registrado | `registerThisDevice()` se llama al arrancar la app, y el menú lo vuelve a registrar con rol y restaurante |
+| P6 | **En web, `getToken()` exige la VAPID key** ("Web Push certificate" de Firebase). Sin ella la promesa nunca resolvía y la app se quedaba sin token sin ningún error | Se acepta `--dart-define=VAPID_KEY=<clave pública>` + **timeout de 20 s** para que nunca pueda colgarse en silencio |
+| P7 | Al rotar el token (`onTokenRefresh`) no se volvía a registrar, dejando el dispositivo sin push | Se vuelve a registrar |
+| P8 | El menú **solo** se actualizaba por push. Sin push, un mesero con la app abierta no veía un producto nuevo hasta reiniciar la app | Respaldo: el menú se refresca cada **60 s** mientras la pantalla está abierta. El push sigue siendo el mecanismo inmediato; el polling solo cubre los fallos de entrega |
+
+> **FCM no funciona en el simulador de iOS**: `getToken()` requiere APNs real.
+> Las pruebas de push en iOS **deben hacerse en hardware** (y con la llave APNs
+> subida en la consola de Firebase). En Android y en web funciona sin más.
+
+### 3.1.d Push: por qué no llegaba la push silenciosa (21/Oct/2026)
+
+Diagnóstico hecho **midiendo**, no suponiendo: se obtuvo un token FCM real
+en Chrome por DevTools Protocol, se registró en el backend y se borró un platillo
+por la API. Resultado: **la push SÍ llegaba** (`menu_updated` con `action:delete`
+recibido por el navegador). El problema estaba antes, en la cadena previa.
+
+| # | Causa real (verificada) | Corrección |
+|---|---|---|
+| **R1** | **El token nunca llegaba al backend.** `register-device` está bajo `router.use(verifyFirebaseToken)`: sin sesión iniciada responde **401**. La app registraba el token **al arrancar, antes del login** → siempre 401 → 0 dispositivos registrados (`npm run push:devices` → *"(ninguno)"*) | El registro se hace **con sesión iniciada**: `authStateChanges()` en el servicio + llamada explícita tras `signInWithEmailAndPassword` con el `restaurantId` del perfil |
+| **R2** | **`getToken()` fallaba por una carrera con el service worker.** El SDK de FCM registra `/firebase-messaging-sw.js` y llama a `pushManager.subscribe()` sin esperar a que el worker esté **activo**: el navegador responde *"Subscription failed - no active Service Worker"* y la app se queda **sin token**. El plugin solo reintenta una vez y sin esperar | `_obtainToken()` reintenta hasta 4 veces con 1,5 s de espera entre intentos |
+| **R3** | **El `restaurantId` de registro podía ser inventado.** Cuando el perfil no se resolvía, el menú usaba el literal `'restaurant_vianey_001'`: el dispositivo se registraba en un restaurante inexistente y la push del restaurante real **nunca le llegaba** (el backend filtra por `restaurantId`) | Si no hay restaurante resuelto, **no se registra**; se registra en cuanto `_fetchLiveMenuFromCloudSql` resuelve el id real |
+| **R4** | **Los tokens se perdían al reiniciar el backend** (array en RAM) | Se persisten en `.push-devices.json` (junto a la API) y se cargan al arrancar. Además se podan los tokens que FCM marca como inválidos |
+| **R5** | **Fuga entre restaurantes**: el filtro de multicast solo excluía los dispositivos con un restaurante **distinto**, así que un dispositivo sin restaurante recibía las push de **todos** los restaurantes del SaaS | El `restaurantId` es **obligatorio** en el filtro: sin restaurante no se recibe nada |
+| **R6** | **La misma push llegaba 3-4 veces** (un envío por tópico + multicast por tópico) | Los tópicos se publican sin multicast y el multicast se hace **una sola vez** |
+| **R7** | **El service worker era de la SDK 9.22.0 y la página de la 10.11.1**, y mostraba una notificación vacía "RapiMesa" en vez de ser silenciosa; tampoco manejaba el clic | SW alineado a **10.11.1**, con `TIPOS_SILENCIOSOS = ['menu_updated']` (no muestra nada), reenvío a **pestañas ocultas** y manejador de `notificationclick` |
+| **R8** | **El re-registro periódico pisaba el restaurante del dispositivo.** El cliente se re-registraba al iniciar sesión y cada 5 min **sin `restaurantId`**; el backend **reemplazaba** el registro y el dispositivo quedaba `Rol=waiter, Restaurante=general`. Como el envío se filtra por restaurante, el mesero **dejaba de recibir TODAS las push** (el admin sí las recibía, y por eso el alta se veía pero el borrado no) | Backend: un re-registro en blanco **conserva** el restaurante ya conocido. Cliente: `registerThisDevice` **memoriza** el restaurante y el rol, y `subscribeToRestaurantTables` pasa por ahí |
+| **R9** | La push de borrado iba sin el nombre del platillo (`targetName: ""`), así que la app solo podía recargar en silencio | El backend resuelve el nombre **antes** de borrar y lo manda en el payload; la app del mesero muestra *"Se eliminó «X» del menú"* |
+
+> **La VAPID key NO era obligatoria** (contradicción de la nota P6): el SDK de FCM
+> usa su clave por defecto (`BDOU99-h67HcA6JeFXHbSNMu7e2yNNu3RzoMj8TM4W88jWxzjfAnG4`)
+> cuando no se le pasa una, y `getToken()` **sí** devuelve un token válido.
+> Medido: token obtenido y push entregada sin definir `--dart-define=VAPID_KEY`.
+> Aun así, se puede pasar la clave propia de la consola de Firebase; el código la
+> usa si está presente.
+
+**Cómo se comprobó (E2E repetible)**: DevTools Protocol → registrar el SW →
+`getToken()` → `POST /api/orders/sync/register-device` → `DELETE /api/menu/item/:id`
+→ el navegador recibe `type:menu_updated, action:delete` y el platillo desaparece
+del menú.
+
+### 3.1.e Tablas de push: `PushDevice` y `PushMessage` (21/Oct/2026)
+
+Son **DOS tablas y no una**, porque tienen ciclos de vida distintos:
+
+| Tabla | Qué guarda | Quién la llena | Para qué sirve |
+|---|---|---|---|
+| **`PushDevice`** | El **token FCM del DISPOSITIVO**, el usuario que lo tiene abierto, su rol, la plataforma, y `lastSeenAt` | El cliente, al abrir la app (`register-device`) | Saber **a quién se puede notificar** y si su token **sigue vivo** |
+| **`PushMessage`** | Un push **enviado**: quién lo originó, a qué audiencia, si era `silent` o `visible`, y cuántos dispositivos lo aceptaron | El backend, en cada envío | **Auditoría y diagnóstico** ("¿llegó o no?") |
+
+El token lo genera **Firebase para el dispositivo** (un usuario puede tener
+varios: su iPad de mesa, su iPhone, su Chrome). El "sender" es el **usuario**
+que ejecutó la acción (el admin que borró el platillo). Son cosas distintas y
+por eso van en tablas distintas.
+
+**Lo que se puede (y lo que NO se puede) con estos datos:**
+
+- ✅ **Cuándo se envió**, quién lo mandó, a qué audiencia iba, si era
+  silencioso o visible, y **cuántos dispositivos aceptó FCM**.
+- ❌ **NO se puede saber si el mesero lo vio.** FCM no tiene API de consulta de
+  mensajes enviados: `successCount` = "FCM aceptó el envío", NO = "entregado".
+  Por eso la columna se llama `successCount` y no `deliveredCount`. Lo único
+  que correlaciona con las métricas de la consola de Firebase es
+  `providerMessageId`.
+- ⚠️ **El aislamiento por restaurante NO lo da la base**: el admin SDK de
+  DataConnect salta el `@auth` del esquema. El filtro vive en el código del
+  endpoint (`requireAdmin` + `restaurantId` del token/perfil, nunca del body).
+
+**Arquitectura del camino caliente:**
+
+```
+   App (mesero/admin)
+        │  POST /api/orders/sync/register-device  {token, userId, role, platform, deviceLabel}
+        ▼
+   ┌──────────────────────┐   escribe    ┌─────────────────┐
+   │  API (push.service)  │ ───────────▶ │  PushDevice     │  ← fuente de verdad
+   │  caché en RAM        │              │  (DataConnect)  │
+   └──────────────────────┘              └─────────────────┘
+        │  al arrancar: hydrateDevicesFromDatabase()  ← la RAM se llena sola
+        │
+        │  envía la push  ──────────────────────┐
+        │  y escribe el log (best effort)      ▼
+        │                              ┌─────────────────┐
+        └─────────────────────────────▶ │  PushMessage    │  ← auditoría
+                                       └─────────────────┘
+```
+
+- La **RAM es solo el camino caliente** (para no ir a la base en cada envío).
+  La **base es la fuente de verdad** y se hidrata al arrancar la API.
+- El **log nunca bloquea**: se escribe DESPUÉS de enviar, en `try/catch`. Si la
+  base falla, el push igual salió (el "borrar Hamburguesa Doble" no se
+  retrasa por escribir en el log).
+- **Una fila de log por evento**, no una por tópico: los envíos a tópicos van
+  con `multicast: false` y no se registran.
+
+**Poda automática**: cuando FCM responde `registration-token-not-registered`
+(el dispositivo se desinstaló o el token rotó), el token se borra de la RAM y
+se marca `isActive=false` en la base. Esos dispositivos aparecen en el panel
+como `activo=false` y ya no reciben push.
+
+**Panel en la app del admin** (icono 🔔 en el dashboard → "Notificaciones"):
+- **Dispositivos**: quién tiene abierto qué dispositivo, en qué plataforma y
+  hace cuánto se vio por última vez. Si `lastSeenAt` tiene más de 24 h, se
+  avisa de que ese token probablemente está muerto y ese dispositivo **no**
+  recibirá push hasta que abra la app.
+- **Actividad**: el historial de pushes (evento, modo, audiencia, quién lo
+  mandó, `aceptados/total`, estado).
+
+**Endpoints nuevos:**
+```
+GET  /api/push/devices            → dispositivos del restaurante (requireAdmin)
+GET  /api/push/history?limit=100  → últimos pushes enviados  (requireAdmin)
+POST /api/orders/sync/unregister-device → da de baja un dispositivo
+```
+
+**Migración hecha:** `firebase dataconnect:sql:migrate` + `firebase deploy --only dataconnect`
+(crea `push_device` y `push_message` en Cloud SQL). El SDK generado se
+actualiza con `firebase dataconnect:sdk:generate`.
+
+> **Cloud Functions NO se puede desplegar**: el proyecto no está en plan Blaze.
+> La API se sirve desde la LAN del restaurante (Opción B), que es lo que ya
+> se usaba. El `firebase deploy --only functions` falla con
+> *"must be on the Blaze (pay-as-you-go) plan"*.
+
+**Herramientas de prueba push** (en `DataConnect/api`):
+
+```bash
+npm run push:devices                      # lista los dispositivos con token registrado
+npm run push:test -- --tipo menu_updated --restaurante <restaurantId>
+npm run push:test -- --tipo staff_call    --restaurante <restaurantId>
+npm run push:test -- --tipo new_order     --restaurante <restaurantId>
+npm run push:test -- --token <FCM_TOKEN>  # a un dispositivo concreto
+```
+
+También hay un **simulador dentro de la app** (solo en modo debug): menú del
+comensal → botón **⇄** → **"Probar push (simular)"**, que dispara exactamente
+los mismos callbacks que activaría un push real (menú actualizado, llamado de
+personal, nueva comanda). Sirve para validar la reacción de la UI sin un
+dispositivo físico.
+| **Topología de despliegue ELEGIDA** | **Opción B: la API se sirve desde la LAN del restaurante** (no se usa Cloud Functions, no hace falta Blaze). La API escucha en `0.0.0.0:3000` y se alcanza en `http://192.168.0.136:3000` |
+
+### 3.1.b Datos reales del restaurante de referencia
+
+Para `restaurantId = 641d8c4bd87847bf803ef3f4218ac7ce` ("VianeyCoffee's"), verificado
+por API el 20/Oct/2026:
+
+| Categoría | sortOrder | Platillos |
+|---|---|---|
+| Aguas Frescas & Refrescos | 1 | Jamaica 1L — $50 |
+| Hamburguesas & Sandwiches | 2 | Club Samguisht con papas — $79 · Hamburguesa sencilla — $69 · **Hamburguesa Doble — $119** |
+
+Personal registrado (idéntico en Firebase Auth y en Cloud SQL):
+
+| Nombre | Correo | Rol |
+|---|---|---|
+| Vianey Valdivieso Sebastian | `sebastian0@gmail.com` | `restaurant_admin` |
+| Tablet Mesa azul | `meseroazul@vianeycooffe.com` | `waiter` |
+| Chef Cocina 1 | `mesero1@vianeycoffe.com` | `kitchen` |
+
+> Ojo con el correo: es **`vianeycooffe.com`** (una sola "e" final), no
+> `vianeycooffie.com`. Con el correo mal escrito Firebase rechaza el login y la
+> app se queda en la pantalla de acceso.
+
+### 3.2 🔴 Bloqueos que impiden operar en producción
+
+**B1 · La API no está publicada.** Cloud Functions exige el plan **Blaze**; el
+proyecto está en **Spark**. Todo lo demás funciona, pero la API no tiene URL
+pública. *Alternativa sin costo: servir la API desde una máquina en la LAN del
+restaurante (`http://192.168.x.x:3000`) — la app ya tiene ATS y cleartext
+habilitados para eso.*
+
+**B2 · El estado operativo vive en la RAM del proceso Node.**
+`order.routes.ts:10` → `const activeOrdersStore: any[] = []`, igual que
+`restaurantBankingStore` y `registeredDeviceTokens`. En Cloud Functions la
+instancia se recicla y **se pierden las comandas activas, las CLABEs registradas
+y los tokens de push**. Con `maxInstances: 1` + `minInstances: 1` (ya configurado
+en `src/function.ts`) se mitiga, pero no se resuelve.
+→ **Requiere mover `Order`/`OrderItem`/`StaffCall`/`RestaurantBankingInfo`/`DeviceToken` a Cloud SQL.**
+El schema ya tiene `Order`; faltan `paidAt`, `paymentMethod`, `amountPaid`,
+`tipAmount`, `subtotal` y tres tablas nuevas.
+
+**B3 · El rol `'table'` no existe en el cliente.** El backend **ya lo soporta**
+(`push.service.ts`: topic `restaurant_X_tables`, filtro `{role:'table'}`), pero
+Flutter solo conoce `waiter | restaurant_admin | super_admin`. La tablet de mesa
+se registra como `'waiter'` → **nunca recibe `menu_updated`** y el push de menú
+le llega al topic equivocado.
+→ Decisión de producto pendiente (ver 5, D1).
+
+### 3.3 🟠 Defectos importantes, aún abiertos
+
+| # | Ubicación | Problema |
+|---|---|---|
+| 0 | `auth.middleware.ts` + `restaurant_menu_management_view.dart` | **Los fallos de las operaciones de menú eran invisibles**: el cliente hacía `catch (_) {}` y, si la respuesta no era 200/201, no mostraba nada. Un administrador recibía un 403 y solo veía que "el producto no aparecía", sin ninguna explicación. Ahora cada operación (crear, editar, cambiar disponibilidad, eliminar, crear categoría) muestra un snackbar rojo con el mensaje real del backend |
+| 1 | `order.routes.ts:95` + `active_order_sheet.dart:92` | El cliente pide la CLABE **sin `restaurantId`** → el backend cae al registro `'default'` (CLABE de "Vianey Coffee S.A. de C.V."). **El comensal nunca ve la CLABE real de su restaurante**; el admin sí. Riesgo de que el cliente transfiera a una cuenta ajena |
+| 2 | `admin_floor_view.dart:1145` | La comanda de barra/teléfono usa `DishItem.sampleDishes` → **precios demo** cobrados al cliente real |
+| 3 | `push_notification_service.dart:32` | `onStaffCall` está declarado y **nunca se asigna**; tampoco hay rama `staff_call` en `onMessageOpenedApp` → "Llamar Personal" no hace nada |
+| 4 | `order.routes.ts:308-315` | El monto que reporta el comensal se **descarta** (`amountPaid = order.totalAmount`) → un traspaso de $50 en mesa de $800 queda registrado como $800 |
+| 5 | `restaurant_admin_dashboard_view.dart:958-989` | "Validar y Confirmar Pago" **activo sin comprobante** y **sin comparar contra el total real** de la mesa |
+| 6 | `restaurant_admin_dashboard_view.dart:998` vs `admin_floor_view.dart:634` | El dashboard escribe `'terminal'`, el piso `'card'`; el corte de caja mapea lo no reconocido a **"Efectivo"** → tarjetas reportadas como efectivo |
+| 7 | `order.routes.ts:16` y todo el cliente | El cliente **nunca envía `restaurantId`** → `GET /sync` devuelve **comandas de todos los restaurantes** (fuga multi-tenant). `!o.restaurantId` además incluye las huérfanas para todos |
+| 8 | `restaurant_orders_manager.dart:429` | `getTableConsolidatedStatus` evalúa `sent` **primero** → una mesa con ronda en cocina + ronda nueva reporta "pendiente", ocultando que ya está lista |
+| 9 | `menu_categories_page.dart:327-356` | `showDialog`/`ScaffoldMessenger` con `context` tras `await` **sin `mounted`** → crash si el usuario navega durante el check de disponibilidad |
+| 10 | `menu_categories_page.dart:759-765`, `kitchen_view.dart:123-133` | "Cerrar Turno" **no hace `signOut()`** en la rama sin email; el KDS nunca hace `signOut()`. En una tablet compartida el comensal hereda la sesión anterior |
+| 11 | `menu_categories_page.dart` (`_setupPushSubscription`) | El dispositivo se registra con `role: widget.userRole` (siempre `'waiter'`) → nunca como `'table'` |
+| 12 | `order_cart_state.dart:24` | `listEquals` sobre `ExtraIngredient` compara por **identidad**, no por valor → el mismo platillo con los mismos extras crea **dos renglones** si el menú se recargó entre medias |
+| 13 | `active_order_sheet.dart:91-95` | `fetchBankingInfo()` se llama **desde `build`** → si el backend falla, `bankingInfo` nunca se llena y el `setModalState` realimenta el fetch: **bucle infinito de peticiones** |
+| 14 | `order_summary_sheet.dart:346` | El botón "Cobrar" **no hace nada**: ni crea la cuenta, ni limpia el carrito. Solo muestra un snackbar |
+
+---
+
+## 4. Cómo arrancar
+
+### 4.1 Backend (local / LAN del restaurante)
+
+```bash
+cd DataConnect/api
+npm install
+npm run dev          # tsx watch en http://0.0.0.0:3000  (desarrollo)
+npm start            # tsx sin watch: para servirlo en un equipo del restaurante
+npm run build        # tsc -> lib/   (requisito si se deploya a Cloud Functions)
+```
+
+La API escucha en `0.0.0.0`, así que es alcanzable desde toda la LAN
+(`http://192.168.0.136:3000` en la red de desarrollo). Requiere `.env` con
+`GCLOUD_PROJECT`, `FIREBASE_API_KEY` y credenciales de servicio. Para Data Connect
+el SDK Admin usa el service account del backend; en Cloud Functions usa
+**Application Default Credentials** (ya implementado).
+
+> Para un despliegue estable conviene un `IP` fijo en el router (o un nombre
+> `mDNS` tipo `http://macbook.local:3000`, que iOS ya permite thanks a
+> `NSAllowsLocalNetworking`).
+
+### 4.2 App Flutter
+
+```bash
+cd RapiMesaFlutter
+flutter pub get
+
+# Local (la API en el mismo Mac)
+flutter run
+
+# Emulador de Android contra la API local
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000
+
+# Teléfono/tablet físico en la MISMA RED que el servidor  ← ESTE es el caso del Samsung
+flutter run --dart-define=API_BASE_URL=http://192.168.0.136:3000
+
+# Web (mismo origen; la API se reescribe en Hosting)
+flutter build web --base-href /app/ --dart-define=API_BASE_URL=/
+```
+
+> ⚠️ **En un dispositivo físico, `localhost` NO es el servidor.** `localhost` y
+> `127.0.0.1` apuntan al propio teléfono; `10.0.2.2` es el alias del **emulador**
+> de Android. Sin `--dart-define` la app no ve la API. Esto era exactamente la
+> causa de que el Samsung mostrara solo el "agua gratis" por defecto: los 3
+> endpoints fallaban y la app conservaba el catálogo hardcodeado.
+> La app ahora **muestra un banner de aviso** cuando la API no responde, en lugar
+> de fallar en silencio.
+
+### 4.3 Entorno iOS (Mac) — dos trampas ya resueltas
+
+En esta Mac (macOS 12.7.6 Intel, Xcode 14.2, Ruby del sistema 2.6.10) compilar
+para iOS tiene dos obstáculos que no son evidentes:
+
+**T1 · CocoaPods no estaba instalado y no se puede instalar a la manera normal.**
+- El Ruby 2.6.10 del sistema fue compilado para `universal-darwin21`, pero el SDK
+  de Xcode 14.2 solo trae `universal-darwin22` → las extensiones nativas no
+  compilaban ("No rule to make target .../ruby/config.h").
+- **RubyGems 3.0.3.1 (2018) no filtra las dependencias transitivas por
+  `required_ruby_version`**, por lo que proponía `zeitwerk 3.x` (que exige Ruby
+  3.2) y el instalador entraba en bucle infinito.
+- `gem update --system` pide sudo sobre `/Library/Ruby/Gems/2.6.0`.
+- **Solución aplicada** (sin sudo, sin tocar Xcode):
+  - `~/.gem/rbconfig_patch.rb` — parche `RUBYOPT` que (a) redirige
+    `RbConfig::CONFIG['rubyarchhdrdir']` a `universal-darwin22` y (b) hace
+    `require 'logger'` antes de ActiveSupport (bug de `concurrent-ruby` ≥ 1.3.5,
+    que quitó el `require` implícito y rompe ActiveSupport 6.x en Ruby < 3).
+  - Gems fijados **en orden y con `--ignore-dependencies`** para que el
+    resolver de RubyGems no proponga versiones incompatibles:
+    `ffi 1.17.2` → `zeitwerk 2.6.18` → `activesupport 6.1.7.10` →
+    `cocoapods-core 1.15.2` → `cocoapods 1.15.2`.
+  - `RUBYOPT` y el `PATH` de los gems añadidos a `~/.zshrc` **y** `~/.zprofile`.
+  - Resultado: `pod --version` → `1.15.2` en shell interactiva y de login.
+
+**T2 · Firebase iOS SDK 11.x exige iOS 13.0 mínimo.** El proyecto estaba en
+`IPHONEOS_DEPLOYMENT_TARGET = 12.0` y `pod install` fallaba con *"Specs
+satisfying the firebase_auth dependency were found, but they required a higher
+minimum deployment target"*. Subido a **13.0** en los tres lugares:
+`ios/Podfile` (`platform :ios, '13.0'`), `ios/Runner.xcodeproj/project.pbxproj`
+(3 ocurrencias) e `ios/Flutter/AppFrameworkInfo.plist` (`MinimumOSVersion`).
+
+**T3 · Configuración `Profile` de Xcode.** Flutter usaba `Release.xcconfig` para
+la configuración `Profile`, por lo que CocoaPods no encontraba
+`Pods-Runner.profile.xcconfig`. Se creó `ios/Flutter/Profile.xcconfig` y se
+apuntó la configuración `Profile` del target `Runner` a él.
+
+**T4 · Firebase iOS 11.x y 12.x exigen Xcode 15.** El SDK de Firebase para iOS
+declara `swift_versions: '5.9'` desde la 11.0.0 (la 10.x usa `5.3`), y el
+modificador de parámetro `sending` de Swift 5.9 no existe en el compilador de
+Xcode 14.2 (Swift 5.7.2). Como **macOS 12.7 no admite Xcode 15** (requiere
+macOS 13.5), la app no compilaba con Firebase 11:
+```
+Cannot find type 'sending' in scope
+  Pods/FirebaseCoreInternal/.../FIRAllocatedUnfairLock.swift:25:28
+```
+**Solución:** se bajó la línea de plugins de Dart a la que usa Firebase iOS 10.x
+→ `firebase_core: ^2.10.0`, `firebase_auth: ^4.7.0`, `firebase_messaging: ^14.7.0`
+(resuelven a Firebase iOS 10.25.0 / FirebaseCoreInternal 10.29.0, Swift 5.3).
+El código Dart **no necesitó cambios**: `dart analyze` quedó en 0 errores.
+*Al subir macOS a 13.5+ y Xcode a 15+, se pueden revertir estas versiones y
+quitar el `platform :ios, '13.0'` si se desea.*
+
+**T5 · `firebase_options.dart` no tenía configuración para iOS.** El
+`flutterfire configure` original solo corrió para Android y web, así que
+`DefaultFirebaseOptions.currentPlatform` lanzaba `UnsupportedError` en iOS
+**antes** de `runApp()` → **pantalla completamente en blanco**. Se añadió el
+bloque `ios` tomando los valores de `ios/Runner/GoogleService-Info.plist`
+(`appId: 1:474513328438:ios:1967a9e212c7a75aa8cb97`).
+
+**T6 · `runApp()` estaba DESPUÉS de pedir el permiso de notificaciones.** En
+iOS, `requestPermission()` no resuelve hasta que el usuario responde, y
+`main.dart` lo esperaba antes de `runApp()` → pantalla en blanco durante todo
+ese tiempo. Ahora `runApp()` va primero y la inicialización de push va con
+`unawaited(...)`. Además `Firebase.initializeApp` va en `try/catch` para que un
+fallo de Firebase no deje la app sin pintar.
+
+**T7 · Faltaba la capability de Push Notifications en iOS.** No había archivo
+de entitlements ni `aps-environment`, y el proyecto Xcode no declaraba
+`SystemCapabilities`. Con eso, FCM falla en un iPhone/iPad real con
+`Invalid fetch response, expected 'token' or 'Error' key`. Se creó
+`ios/Runner/Runner.entitlements` con `aps-environment = development` y se
+enlazó con `CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements`.
+
+> **T8 · FCM no funciona en el simulador de iOS.** `getToken()` requiere APNs
+> real: en el simulador siempre falla. **Las pruebas de push en iOS deben
+> hacerse en hardware.** Además, el proyecto de Firebase necesita la **llave
+> APNs** subida en la consola (Project settings → tu app iOS → Upload APNs
+> key) para que el token se emita en un dispositivo real.
+
+**T9 · El disco casi lleno rompía la instalación.** Con solo 2.1 GB libres
+(88 % de uso) el `simctl install` fallaba con *"Failed to create container"*.
+Se liberaron 1.4 GB borrando `~/Library/Developer/Xcode/DerivedData` y los
+simuladores apagados sin usar. Antes de un build de iOS conviene verificar
+`df -h /`.
+
+### 4.4 Emulador de iPad
+```bash
+# El simulador ya existía y estaba booted:
+flutter run -d "iPad Pro (11-inch) (4th generation)"
+flutter run -d 297FF50B-B150-4D03-956F-B3A78D1D3E0F
+```
+
+**En el simulador de iOS, `localhost:3000` ES el Mac** (el simulador comparte la
+pila de red del host), verificado con `xcrun simctl spawn <udid> curl
+http://localhost:3000/api/health` → 200. Por eso **no** hace falta
+`--dart-define` en el simulador, y **sí** hace falta en el hardware.
+
+El simulador reproduce iOS 16.2 con Xcode 14.2. Para iOS 17+ o para el
+App Store hay que subir Xcode (y con él el SDK de iOS).
+
+### 4.5 Emulador Android en esta Mac: NO es viable
+
+El único AVD instalado es `Medium_Phone_API_37.0` (imagen
+`google_apis_playstore` x86_64, API 37). En esta Mac (4 núcleos lógicos /
+2 físicos, 8 GB RAM) **no arranca**:
+
+- El emulador se auto-limita a **1 solo core** ("Running on a system with less
+  than 6 logical cores"), y el flag `-cores 2` se ignora.
+- La imagen API 37 exige GLES 3.1, así que fuerza **renderizado por software**
+  (swiftshader), que multiplica el tiempo de arranque.
+- Resultado: el dispositivo queda en `offline` indefinidamente y
+  `sys.boot_completed` nunca llega a 1.
+- Además el AVD pedía una partición de datos de 12 GB y el disco no daba:
+  `FATAL | Not enough space to create userdata partition`. Se redujo
+  `disk.dataPartition.size` a 2 GB (el emulador lo normaliza a **bytes**, hay
+  que escribir `2147483648`, no `2G`), pero eso no arregla el arranque.
+
+**Alternativa válida para Android: el teléfono físico** (`SM A065M`, Android 14),
+que Flutter detecta por USB o por depuración inalámbrica. Es mejor target que
+el emulador para esta app: el hardware real prueba el push (FCM), la cámara y
+el cleartext de verdad.
+
+```bash
+flutter run -d R83X808NBLL --dart-define=API_BASE_URL=http://192.168.0.136:3000
+```
+
+Si en el futuro se quiere un emulador usable, hace falta (a) una imagen de
+sistema más liviana (API 30-34 `google_apis` sin Play Store, ~1.5 GB) y (b) más
+espacio en disco.
+
+### 4.6 Despliegue
+
+```bash
+firebase deploy --only hosting                              # landing + app web
+firebase deploy --only functions --project restaurantapp-3007c   # requiere Blaze
+firebase dataconnect:sdk:generate                           # tras tocar queries.gql
+firebase dataconnect:sql:migrate --force                    # tras tocar schema.gql
+```
+
+### 4.7 Cuentas de prueba
+
+| Correo | Password | Rol | Notas |
+|---|---|---|---|
+| `mesero1@vianeycoffe.com` | `123456` | `kitchen` | Chef oficial. Claims: `restaurantId=641d8c4bd87847bf803ef3f4218ac7ce` |
+| `chebetoa7@gmail.com` | — | `super_admin` | Dueño del SaaS (ruteado en `login_page.dart:107`) |
+| `victor@coffee.com` | — | `restaurant_admin` | Suscriptor de prueba, trial 7 días |
+| `sebastian0@gmail.com` | — | `restaurant_admin` | Restaurante VianeyCoffee's |
+| `meseroazul@vianeycooffie.com` | — | `waiter` | Mesero usado en la prueba de push |
+
+---
+
+## 5. Decisiones de producto pendientes (bloquean el cierre)
+
+**D1 · ¿Cómo se distingue la perspectiva en una tablet compartida?**
+Recomendación: **sesión de dispositivo + selector de modo**. El dispositivo se
+inscribe una vez (identidad del restaurante + `role:'table'` + `tableId`, o
+`role:'waiter'`); al abrir ofrece **"Modo Mesa"** (libre, cero fricción para el
+comensal) y **"Modo Mesero"** (pide **PIN**). El PIN ya es un concepto del
+producto (el chef entra con `123456`).
+*Descartado:* una cuenta Firebase por mesa → el comensal tendría que loguearse y
+eso mata el autoservicio.
+
+**D2 · ¿El comensal usa la tablet de la mesa o su propio teléfono (QR)?**
+Si es lo segundo hay un **tercer cliente** (PWA) y el `tableId` viaja en la URL
+del QR. La infra de PWA ya existe (`web/`).
+
+**D3 · ¿El teléfono es del mesero?** Si sí, ese teléfono debe recibir "Mesa 4
+pide la cuenta" — que es justo el push muerto (3.3 #3) y que además hoy se manda
+al topic **global** por el `restaurantId` ausente (3.3 #7).
+
+**D4 · La identidad de la tablet sin cuenta de Firebase.**
+Si el comensal no tiene cuenta, de dónde sale el `restaurantId`/`tableId` que
+envía al backend. Propuesta: **token de instalación** firmado por el restaurante
+(el admin lo genera al dar de alta la mesa), en las cabeceras. Esto de paso
+mata la fuga multi-tenant (3.3 #7) y arregla la CLABE (3.3 #1).
+
+---
+
+## 6. Deuda técnica contratada (por prioridad)
+
+| P | Ítem | Por qué |
+|---|---|---|
+| **P0** | Publicar la API (Blaze) **o** alojarla en la LAN del restaurante | Sin API no hay producto. Ver B1 |
+| **P0** | Mover el estado de RAM a Cloud SQL | Sin esto no hay operación sobreviviente a un reinicio. Ver B2 |
+| **P0** | Enviar `restaurantId` en **todas** las peticiones y filtrar por tenant en el backend | Fuga multi-tenant. Ver 3.3 #7 |
+| **P1** | CLABE por restaurante: pasar `restaurantId` en `fetchBankingInfo` y quitar el fallback `'default'` | Transferencias a cuentas ajenas. Ver 3.3 #1 |
+| **P1** | Rol `'table'` en el cliente + registro de dispositivo (D1/D4) | El push de menú no llega a las mesas. Ver B3 |
+| **P1** | `onStaffCall` conectado + rama `staff_call` en `onMessageOpenedApp` | La válvula de escape del mesero virtual no funciona. Ver 3.3 #3 |
+| **P1** | Validación del comprobante: comparar contra el total real, exigir imagen, persistir el monto reportado | El cobro no es auditable. Ver 3.3 #4 y #5 |
+| **P2** | Vocabulario único de método de pago (`cash`/`card`/`transfer`) | El corte de caja miente. Ver 3.3 #6 |
+| **P2** | Menú real en la comanda de barra/teléfono | Se cobran precios demo. Ver 3.3 #2 |
+| **P2** | `signOut()` en "Cerrar Turno" (menú y KDS) | Sesión heredada en tablet compartida. Ver 3.3 #10 |
+| **P2** | `mounted` antes de `showDialog`/`ScaffoldMessenger` tras `await` | Crash. Ver 3.3 #9 |
+| **P2** | `==`/`hashCode` en `ExtraIngredient`; quitar `fetchBankingInfo` del `build` | Renglones duplicados y bucle de peticiones. Ver 3.3 #12 y #13 |
+| **P3** | `Docs/DataModel.md` está obsoleto (documenta **Firestore**; el proyecto usa Data Connect/PostgreSQL) | Confunde a quien lea el repo |
+| **P3** | Servicio Data Connect fantasma en `us-central1` (mismo serviceId, sin Cloud SQL ni schema) | Residuo de una creación fallida; borrable |
+| **P3** | Reducir la imagen del comprobante en el cliente (el límite de Cloud Run es 10 MB y el SW siempre es visible en web) | Comprobantes grandes fallan |
+
+---
+
+## 7. Reglas que NO hay que romper
+
+1. **El rol sale de los Custom Claims**, nunca del body ni de heurísticas sobre el correo.
+2. **El `restaurantId` lo decide el servidor** a partir del token, nunca el cliente.
+3. **Las comandas nunca se borran.** Una orden queda activa hasta que se registra
+   el cobro (`paid`); después pasa al historial / corte de caja. Es la regla de
+   negocio "cero pérdida de historial".
+4. **`paid` es terminal.** Ningún sondeo puede degradar una comanda pagada.
+5. **La app es de dos perspectivas** (mesero / mesa virtual) sobre el mismo código.
+6. **La web es el embudo comercial**, no la app del comensal (salvo que D2 diga lo contrario).
+
+---
+
+## 8. Historial
+
+El registro detallado de las 32 tareas completadas está en el historial original
+de este archivo (sección "HISTORIAL DE MIGRACIÓN Y ACTUALIZACIONES", líneas
+originales 61-308). Resumen por fases:
+
+1. **Fase inicial (MAUI).** Node/Express + Data Connect + PostgreSQL en Cloud SQL,
+   Firebase Auth con Custom Claims, Swagger, `MenuCategoriesPage.xaml`.
+2. **Migración a Flutter** (09/Oct/2026). Se conserva `RapiMesaApp/` por si acaso.
+3. **Rediseño gastronómico** (paleta carbón/terracota, carrusel 3D, autoplay,
+   modal de extras obligatorio antes de sumar al carrito).
+4. **Multiroles en tiempo real**: `RestaurantOrdersManager` + `KitchenView` +
+   `AdminFloorView` + banner en vivo para el cliente + selector rápido de roles.
+5. **Persistencia real** en Cloud SQL: personal, meseros, mesas virtuales, perfil
+   dinámico del restaurante, cocina como rol propio.
+6. **Sincronización en tiempo real** de comandas vía `/api/orders/sync*` +
+   polling de 2 s. (Pendiente: mover a Data Connect, ver P0.)
+7. **Rondas múltiples por mesa** (Comida + Bebidas + Postres) con cuenta
+   consolidada, `payAndCloseTable` y liberación de mesa.
+8. **Flujo de pago completo**: efectivo / terminal / SPEI con CLABE y comprobante
+   en base64, validación por el administrador, corte de caja.
+9. **SmartPollingEngine**: canal de 1.5 s con ventana de 5 min, reposo por
+   inactividad, push para despertarlo.
+10. **Landing comercial** con autorregistro, 4 planes, panel de super admin y
+    módulo de MRR.
+11. **[19-20/Oct/2026] — Preparación de despliegue y cierre de brechas** (esta
+    sesión): compilación TS arreglada (20 → 0 errores) y queries GraphQL
+    corregidas + SDK regenerado; autenticación real en toda la API con control
+    de roles por claims; cliente migrado a `ApiConfig`/`ApiClient` con token de
+    Firebase y URL configurable (29 URLs hardcodeadas eliminadas); landing y
+    app web publicadas en `restaurantapp-3007c.web.app`; corregidos la
+    regresión de estado `paid`, la colisión de IDs de comanda, el `dispose()`
+    ausente del manager, el cobro "falso" y el borrado de platillos por error
+    de servidor; habilitadas las excepciones de red (ATS en iOS, cleartext solo
+    en builds debug de Android) para poder operar en la LAN del restaurante;
+    documentada la dependencia del plan Blaze para publicar la API como Cloud
+    Function y la necesidad de mover el estado operativo de RAM a Cloud SQL.

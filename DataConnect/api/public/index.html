@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RapiMesa | Sistema Operativo Gastronómico & Mesero Virtual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #131518;
+      --card-bg: #1E2228;
+      --card-border: #2D323A;
+      --accent: #E25822;
+      --accent-hover: #F16821;
+      --green: #10B981;
+      --text-main: #FFFFFF;
+      --text-muted: #9CA3AF;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    header {
+      background: rgba(30, 34, 40, 0.85);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 1px solid var(--card-border);
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 800;
+      font-size: 22px;
+      color: #FFF;
+      text-decoration: none;
+    }
+
+    .brand span {
+      color: var(--accent);
+    }
+
+    nav {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+    }
+
+    nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      transition: color 0.2s;
+    }
+
+    nav a:hover {
+      color: #FFF;
+    }
+
+    .btn-cta {
+      background: linear-gradient(135deg, var(--accent) 0%, #F16821 100%);
+      color: #FFF;
+      padding: 10px 22px;
+      border-radius: 12px;
+      font-weight: 700;
+      text-decoration: none;
+      font-size: 14px;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(226, 88, 34, 0.35);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .btn-cta:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(226, 88, 34, 0.5);
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 90px 24px 60px;
+      max-width: 1100px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: rgba(226, 88, 34, 0.15);
+      border: 1px solid rgba(226, 88, 34, 0.3);
+      border-radius: 999px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      font-size: 54px;
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 24px;
+      letter-spacing: -1px;
+    }
+
+    .hero h1 span {
+      background: linear-gradient(135deg, #FFF 30%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p {
+      font-size: 18px;
+      color: var(--text-muted);
+      max-width: 720px;
+      margin: 0 auto 36px;
+    }
+
+    .hero-actions {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .btn-secondary {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: #FFF;
+      padding: 12px 24px;
+      border-radius: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 14px;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .btn-secondary:hover {
+      background: #252A32;
+      border-color: #3F4652;
+    }
+
+    /* Features Grid */
+    .features {
+      max-width: 1100px;
+      margin: 60px auto;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+    }
+
+    .feature-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 28px;
+      position: relative;
+      transition: transform 0.2s;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-4px);
+    }
+
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      background: rgba(226, 88, 34, 0.15);
+      color: var(--accent);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      margin-bottom: 18px;
+    }
+
+    .feature-card h3 {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+
+    .feature-card p {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    /* Pricing Section */
+    .pricing-section {
+      background: #0E1012;
+      padding: 80px 24px;
+      border-top: 1px solid var(--card-border);
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .section-header {
+      text-align: center;
+      max-width: 700px;
+      margin: 0 auto 50px;
+    }
+
+    .section-header h2 {
+      font-size: 38px;
+      font-weight: 800;
+      margin-bottom: 14px;
+    }
+
+    .section-header p {
+      color: var(--text-muted);
+      font-size: 16px;
+    }
+
+    .pricing-grid {
+      max-width: 1160px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 24px;
+    }
+
+    .plan-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .plan-card.featured {
+      border: 2px solid var(--accent);
+      background: linear-gradient(180deg, #22262E 0%, #1A1D23 100%);
+      transform: scale(1.03);
+      box-shadow: 0 10px 30px rgba(226, 88, 34, 0.2);
+    }
+
+    .plan-badge {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent);
+      color: #FFF;
+      padding: 4px 14px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .plan-name {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .plan-price {
+      font-size: 36px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .plan-price span {
+      font-size: 14px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .plan-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+      min-height: 40px;
+    }
+
+    .plan-features {
+      list-style: none;
+      margin-bottom: 28px;
+      flex-grow: 1;
+    }
+
+    .plan-features li {
+      font-size: 13px;
+      color: #D1D5DB;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .plan-features li::before {
+      content: "✓";
+      color: var(--green);
+      font-weight: 800;
+      font-size: 14px;
+    }
+
+    /* Registration Form Section */
+    .register-section {
+      padding: 80px 24px;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .register-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 36px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #D1D5DB;
+    }
+
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 13px 16px;
+      background: var(--bg-dark);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      color: #FFF;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+      border-color: var(--accent);
+    }
+
+    .checkbox-group {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin-bottom: 24px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .checkbox-group a {
+      color: var(--accent);
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    /* Modal Privacy Policy */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      max-width: 650px;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 32px;
+      position: relative;
+    }
+
+    .modal-content h3 {
+      font-size: 22px;
+      margin-bottom: 16px;
+      color: var(--accent);
+    }
+
+    .modal-content p {
+      font-size: 13px;
+      color: #D1D5DB;
+      margin-bottom: 14px;
+      line-height: 1.6;
+    }
+
+    .close-modal {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: #2D323A;
+      border: none;
+      color: #FFF;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    /* Super Admin Section */
+    .admin-section {
+      padding: 60px 24px;
+      max-width: 1100px;
+      margin: 0 auto;
+      display: none; /* Se activa con login de chebetoa7 */
+    }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 18px;
+      margin-bottom: 30px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      padding: 20px;
+      border-radius: 18px;
+    }
+
+    .stat-card .val {
+      font-size: 28px;
+      font-weight: 800;
+      color: #FFF;
+      margin-bottom: 4px;
+    }
+
+    .stat-card .lbl {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card-bg);
+      border-radius: 18px;
+      overflow: hidden;
+      border: 1px solid var(--card-border);
+    }
+
+    th, td {
+      padding: 14px 18px;
+      text-align: left;
+      font-size: 13px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    th {
+      background: #181B20;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+
+    .badge-paid {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--green);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 11px;
+    }
+
+    .badge-pending {
+      background: rgba(239, 68, 68, 0.15);
+      color: #EF4444;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 11px;
+    }
+
+    footer {
+      border-top: 1px solid var(--card-border);
+      padding: 40px 24px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <a href="#" class="brand">
+      🍽️ Rapi<span>Mesa</span>
+    </a>
+    <nav>
+      <a href="#planes">Planes</a>
+      <a href="#beneficios">Beneficios</a>
+      <a href="#" onclick="openPrivacyModal()">Aviso de Privacidad</a>
+      <a href="#" onclick="toggleSuperAdminView()" style="color: #F16821;">Super Admin</a>
+      <a href="#registro" class="btn-cta">Registrar Mi Restaurante</a>
+    </nav>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero" id="beneficios">
+    <div class="badge-pill">
+      🚀 La Plataforma POS & Mesero Virtual #1 en la Nube
+    </div>
+    <h1>El Futuro de tu Restaurante:<br><span>Menú 3D, Mesero Virtual & Cocina KDS</span></h1>
+    <p>Elimina errores de comanda, reduce los costos de personal y acelera la rotación de mesas. Deja que tus comensales pidan desde la tablet en su mesa o equipa a tus meseros con la comanda más rápida del mercado.</p>
+    <div class="hero-actions">
+      <a href="#registro" class="btn-cta" style="padding: 14px 32px; font-size: 16px;">Comenzar Prueba Gratuita</a>
+      <a href="#planes" class="btn-secondary">Ver Paquetes de Suscripción</a>
+    </div>
+  </section>
+
+  <!-- Features Grid -->
+  <section class="features">
+    <div class="feature-card">
+      <div class="feature-icon">📱</div>
+      <h3>Mesero Virtual en Mesa</h3>
+      <p>Tablets fijas donde el comensal explora platillos en 3D flotante, selecciona ingredientes extras obligatorios y notas de cocina sin esperar al camarero.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">👨‍🍳</div>
+      <h3>Monitor KDS para Cocina</h3>
+      <p>Cola de prioridad FIFO con semáforo de tiempo en vivo (verde, amarillo y rojo). Los chefs ven cada detalle y avisan con 1 toque cuando el platillo está listo.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🍸</div>
+      <h3>Mostrador, Barra & Teléfono</h3>
+      <p>El administrador de piso levanta comandas para comensales en barra o llamadas para llevar con un solo toque y asignación inteligente de entrega.</p>
+    </div>
+  </section>
+
+  <!-- Pricing -->
+  <section class="pricing-section" id="planes">
+    <div class="section-header">
+      <h2>Planes Diseñados Para Tu Crecimiento</h2>
+      <p>Sin plazos forzosos. Elige el paquete que se adapte al tamaño de tu restaurante o cadena.</p>
+    </div>
+
+    <div class="pricing-grid">
+      <!-- Free -->
+      <div class="plan-card">
+        <div class="plan-name">Prueba Gratuita</div>
+        <div class="plan-price">$0 <span>/ 7 días</span></div>
+        <div class="plan-desc">Prueba completa sin costo durante 7 días. Ideal para probar el sistema en tu local.</div>
+        <ul class="plan-features">
+          <li>1 Sucursal de Restaurante</li>
+          <li>1 Administrador / Gerente</li>
+          <li>Hasta 3 Cupos (Meseros o Mesas)</li>
+          <li>KDS de Cocina en Tiempo Real</li>
+          <li>Menú Digital Completo</li>
+          <li>Expira a los 7 días de prueba</li>
+        </ul>
+        <button class="btn-secondary" onclick="selectPlan('free')">Comenzar 7 Días Gratis</button>
+      </div>
+
+      <!-- Express -->
+      <div class="plan-card featured">
+        <div class="plan-badge">MÁS POPULAR</div>
+        <div class="plan-name">Express</div>
+        <div class="plan-price">$29 <span>USD / mes (~$580 MXN)</span></div>
+        <div class="plan-desc">Para restaurantes medianos con flujo constante de mesas y comensales.</div>
+        <ul class="plan-features">
+          <li>1 Sucursal de Restaurante</li>
+          <li>2 Administradores / Gerentes de Turno</li>
+          <li>Hasta 15 Cupos de Comandas (Mesas / Meseros)</li>
+          <li>KDS de Cocina FIFO con Semáforo</li>
+          <li>Módulo de Barra y Pedidos por Teléfono</li>
+          <li>Soporte Prioritario</li>
+        </ul>
+        <button class="btn-cta" onclick="selectPlan('express')">Elegir Express</button>
+      </div>
+
+      <!-- Full -->
+      <div class="plan-card">
+        <div class="plan-name">Full</div>
+        <div class="plan-price">$89 <span>USD / mes (~$1,780 MXN)</span></div>
+        <div class="plan-desc">Para restaurantes de alto volumen o cadenas con múltiples sucursales.</div>
+        <ul class="plan-features">
+          <li>Hasta 3 Sucursales</li>
+          <li>5 Administradores / Supervisores</li>
+          <li>Hasta 50 Cupos de Comandas</li>
+          <li>Sincronización multi-sucursal</li>
+          <li>Reportes de ventas y tiempos de cocina</li>
+        </ul>
+        <button class="btn-secondary" onclick="selectPlan('full')">Elegir Full</button>
+      </div>
+
+      <!-- Enterprise / Ilimitado -->
+      <div class="plan-card">
+        <div class="plan-name">Enterprise Ilimitado</div>
+        <div class="plan-price">$1,000 <span>USD / mes ($20,000 MXN)</span></div>
+        <div class="plan-desc">Para grandes franquicias o cadenas que requieren capacidad sin límites.</div>
+        <ul class="plan-features">
+          <li>Sucursales Ilimitadas</li>
+          <li>Administradores Ilimitados</li>
+          <li>Comandas / Mesas Ilimitadas</li>
+          <li>SLA 99.9% y Soporte Dedicado 24/7</li>
+          <li>Capacitación de personal incluida</li>
+        </ul>
+        <button class="btn-secondary" onclick="selectPlan('enterprise')">Elegir Ilimitado</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Registration Form -->
+  <section class="register-section" id="registro">
+    <div class="register-card">
+      <h2 style="font-size: 26px; margin-bottom: 8px;">Registra tu Restaurante</h2>
+      <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 24px;">Configura tu cuenta en 1 minuto y accede de inmediato al sistema.</p>
+
+      <form id="registerForm" onsubmit="handleRegistration(event)">
+        <div class="form-group">
+          <label>Nombre del Restaurante / Franquicia *</label>
+          <input type="text" id="restaurantName" placeholder="Ej: Edna's Coffee Bar" required>
+        </div>
+
+        <div class="form-group">
+          <label>Nombre del Gerente o Administrador *</label>
+          <input type="text" id="managerName" placeholder="Ej: Roberto Gómez" required>
+        </div>
+
+        <div class="form-group">
+          <label>Correo Electrónico *</label>
+          <input type="email" id="email" placeholder="gerente@restaurante.com" required>
+        </div>
+
+        <div class="form-group">
+          <label>Contraseña de Acceso *</label>
+          <input type="password" id="password" placeholder="Mínimo 6 caracteres" required minlength="6">
+        </div>
+
+        <div class="form-group">
+          <label>Teléfono de Contacto (WhatsApp)</label>
+          <input type="tel" id="phone" placeholder="+52 999 123 4567">
+        </div>
+
+        <div class="form-group">
+          <label>Plan de Suscripción Seleccionado *</label>
+          <select id="planSelect">
+            <option value="free" selected>Prueba Gratuita (7 días - 3 cupos) - $0</option>
+            <option value="express">Express ($29 USD / mes - 15 cupos)</option>
+            <option value="full">Full ($89 USD / mes - 50 cupos)</option>
+            <option value="enterprise">Enterprise Ilimitado ($1,000 USD / $20,000 MXN)</option>
+          </select>
+        </div>
+
+        <div class="checkbox-group">
+          <input type="checkbox" id="termsCheck" required>
+          <label for="termsCheck">
+            He leído y acepto el <a onclick="openPrivacyModal()">Aviso de Privacidad y Deslinde Legal</a>. Acepto que RapiMesa es un proveedor tecnológico y que los productos y alimentos comercializados son responsabilidad exclusiva del restaurante.
+          </label>
+        </div>
+
+        <button type="submit" class="btn-cta" id="btnSubmitRegister" style="width: 100%; padding: 14px; font-size: 16px;">
+          Completar Registro y Activar Cuenta
+        </button>
+      </form>
+      <div id="registerAlert" style="margin-top: 16px; display: none;"></div>
+    </div>
+  </section>
+
+  <!-- Super Admin Dashboard Section (Visible al activar) -->
+  <section class="admin-section" id="superAdminView">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+      <div>
+        <h2 style="font-size: 28px;">Panel Super Administrador</h2>
+        <p style="color: var(--text-muted); font-size: 14px;">Sesión activa: <strong style="color: var(--accent);">chebetoa7@gmail.com</strong> (Dueño de Plataforma)</p>
+      </div>
+      <button class="btn-secondary" onclick="toggleSuperAdminView()">Cerrar Vista Admin</button>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="val">$1,118 USD</div>
+        <div class="lbl">Facturación Mensual Total (~$22,360 MXN)</div>
+      </div>
+      <div class="stat-card">
+        <div class="val" style="color: var(--green);">3</div>
+        <div class="lbl">Restaurantes Al Corriente (Pagados)</div>
+      </div>
+      <div class="stat-card">
+        <div class="val" style="color: #EF4444;">1</div>
+        <div class="lbl">Pagos Pendientes / Adeudos este Mes</div>
+      </div>
+      <div class="stat-card">
+        <div class="val">4</div>
+        <div class="lbl">Total de Restaurantes Registrados</div>
+      </div>
+    </div>
+
+    <h3 style="margin-bottom: 14px; font-size: 18px;">Restaurantes y Estado de Mensualidad</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Restaurante</th>
+          <th>Gerente / Email</th>
+          <th>Plan Activo</th>
+          <th>Cuota Mensual</th>
+          <th>Estatus Pago Mes</th>
+          <th>Acción</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Edna's Coffee</strong></td>
+          <td>Edna Solano (edna@coffee.com)</td>
+          <td><span style="color: var(--accent); font-weight: bold;">Express</span></td>
+          <td>$29 USD</td>
+          <td><span class="badge-paid">PAGADO (Octubre)</span></td>
+          <td><button class="btn-secondary" style="padding: 4px 10px; font-size: 11px;">Ver Sucursal</button></td>
+        </tr>
+        <tr>
+          <td><strong>Dely Bistro</strong></td>
+          <td>Carlos Méndez (carlos@dely.com)</td>
+          <td><span style="color: #60A5FA; font-weight: bold;">Full</span></td>
+          <td>$89 USD</td>
+          <td><span class="badge-paid">PAGADO (Octubre)</span></td>
+          <td><button class="btn-secondary" style="padding: 4px 10px; font-size: 11px;">Ver Sucursal</button></td>
+        </tr>
+        <tr>
+          <td><strong>Internacional Steakhouse</strong></td>
+          <td>Mariana Ruiz (mariana@steak.com)</td>
+          <td><span style="color: #F59E0B; font-weight: bold;">Enterprise</span></td>
+          <td>$1,000 USD</td>
+          <td><span class="badge-pending">PENDIENTE DE PAGO</span></td>
+          <td><button class="btn-cta" style="padding: 4px 10px; font-size: 11px;">Enviar Recordatorio</button></td>
+        </tr>
+        <tr>
+          <td><strong>Tacos Los Álamos</strong></td>
+          <td>Roberto G. (roberto@tacos.com)</td>
+          <td><span style="color: var(--text-muted); font-weight: bold;">Free</span></td>
+          <td>$0 USD</td>
+          <td><span class="badge-paid">AL CORRIENTE (Free)</span></td>
+          <td><button class="btn-secondary" style="padding: 4px 10px; font-size: 11px;">Ofrecer Upgrade</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Privacy Modal -->
+  <div class="modal-overlay" id="privacyModal">
+    <div class="modal-content">
+      <button class="close-modal" onclick="closePrivacyModal()">✕</button>
+      <h3>Aviso de Privacidad & Términos de Servicio</h3>
+      
+      <p><strong>1. Identidad del Prestador Tecnológico:</strong><br>
+      RapiMesa (en adelante "La Plataforma") es un software como servicio (SaaS) dedicado a la optimización de procesos de pedidos, comanda virtual en mesa y monitor de cocina KDS para establecimientos de alimentos y bebidas.</p>
+
+      <p><strong>2. Deslinde de Responsabilidad Legal y de Producto:</strong><br>
+      La Plataforma opera exclusivamente como un medio tecnológico de captura y gestión operativa. <strong>RapiMesa NO interviene, supervisa ni es responsable de la calidad, salubridad, precios, origen, preparación, contenido calórico o alérgenos de los alimentos o bebidas ofrecidos</strong> por los restaurantes registrados. Cualquier inconformidad, daño, reclamación civil o queja sanitaria derivada del consumo de productos es responsabilidad directa e irrenunciable del establecimiento gastronómico.</p>
+
+      <p><strong>3. Protección de Datos y Privacidad del Comensal:</strong><br>
+      La información registrada en la plataforma (órdenes, notas de comanda, nombres de contacto o números telefónicos para pedidos de mostrador/llevar) es de uso estrictamente operativo. RapiMesa <strong>no comercializa, renta ni transfiere datos de comensales ni de clientes a terceros</strong> con fines publicitarios ajenos al servicio.</p>
+
+      <p><strong>4. Tratamiento de Datos Bancarios y Cobros Directos (SPEI / Efectivo / Terminal):</strong><br>
+      La información bancaria (Banco, Titular de cuenta y CLABE Interbancaria de 18 dígitos) ingresada por el Administrador del restaurante se utiliza <strong>única y exclusivamente con la finalidad de que los comensales en mesa realicen depósitos y transferencias electrónicas directas hacia la cuenta bancaria del propio establecimiento</strong>. RapiMesa NO es una entidad financiera ni intermediario de fondos (pasarela que retenga o custodie el dinero del restaurante): los fondos viajan directamente de la cuenta bancaria del cliente a la del restaurante. Asimismo, la captura de comprobantes de pago de los comensales se utiliza de forma confidencial únicamente para la validación visual y confirmación del pago de la comanda en curso. RapiMesa nunca solicita ni almacena números de tarjeta de crédito/débito de 16 dígitos (PAN) ni códigos de seguridad (CVV).</p>
+
+      <p><strong>5. Aceptación del Servicio:</strong><br>
+      Al registrarse en RapiMesa, el cliente administrativo manifiesta tener la personería legal para operar su comercio y libera a RapiMesa de cualquier responsabilidad ante autoridades comerciales o quejas derivadas de transacciones mercantiles entre el restaurante y sus clientes.</p>
+
+      <button class="btn-cta" style="width: 100%; margin-top: 14px;" onclick="closePrivacyModal()">He Leído y Acepto los Términos</button>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <p>© 2026 RapiMesa SaaS. Todos los derechos reservados.</p>
+    <p style="margin-top: 6px;">
+      <a href="#" onclick="openPrivacyModal()">Aviso de Privacidad</a> • 
+      <a href="#planes">Planes</a> • 
+      <a href="mailto:soporte@rapimesa.com">Contacto: soporte@rapimesa.com</a>
+    </p>
+  </footer>
+
+  <script>
+    /**
+     * URL base de la API de RapiMesa.
+     *
+     * - Vacío (''): usa el mismo origen. Es el modo de producción cuando la API
+     *   vive en una Cloud Function y el Hosting reescribe /api/** hacia ella.
+     * - URL absoluta: útil mientras la API corre en un servidor propio o en un
+     *   túnel de pruebas (por ejemplo https://algo.trycloudflare.com).
+     */
+    const RAPI_API_BASE = '';
+
+    function apiUrl(path) {
+      return RAPI_API_BASE + path;
+    }
+
+    function selectPlan(plan) {
+      const select = document.getElementById('planSelect');
+      select.value = plan;
+      document.getElementById('registro').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function openPrivacyModal() {
+      document.getElementById('privacyModal').classList.add('active');
+    }
+
+    function closePrivacyModal() {
+      document.getElementById('privacyModal').classList.remove('active');
+    }
+
+    function toggleSuperAdminView() {
+      const sec = document.getElementById('superAdminView');
+      if (sec.style.display === 'block') {
+        sec.style.display = 'none';
+      } else {
+        sec.style.display = 'block';
+        sec.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
+    async function handleRegistration(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btnSubmitRegister');
+      const alertBox = document.getElementById('registerAlert');
+
+      const payload = {
+        restaurantName: document.getElementById('restaurantName').value,
+        managerName: document.getElementById('managerName').value,
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value,
+        phone: document.getElementById('phone').value,
+        planName: document.getElementById('planSelect').value,
+      };
+
+      btn.disabled = true;
+      btn.innerText = 'Registrando restaurante...';
+      alertBox.style.display = 'none';
+
+      try {
+        const response = await fetch(apiUrl('/api/auth/register-restaurant'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          alertBox.style.display = 'block';
+          alertBox.style.background = '#1E2228';
+          alertBox.style.border = '1px solid #10B981';
+          alertBox.style.padding = '24px';
+          alertBox.style.borderRadius = '16px';
+          alertBox.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
+          alertBox.innerHTML = `
+            <div style="text-align: center; margin-bottom: 20px;">
+              <div style="font-size: 42px; margin-bottom: 10px;">🎉</div>
+              <h3 style="color: #10B981; font-size: 22px; margin-bottom: 6px;">¡Registro Exitoso para ${payload.restaurantName}!</h3>
+              <p style="color: #9CA3AF; font-size: 14px;">Tu cuenta de <strong>Administrador de Restaurante</strong> ha sido activada con la <strong>Prueba Gratuita de 7 Días</strong>.</p>
+            </div>
+
+            <div style="background: #131518; border-radius: 12px; padding: 16px; margin-bottom: 24px; border: 1px solid #2D323A;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;">
+                <span style="color: #9CA3AF;">Restaurante:</span>
+                <strong style="color: white;">${payload.restaurantName}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;">
+                <span style="color: #9CA3AF;">Usuario Administrador:</span>
+                <strong style="color: #E25822;">${payload.email}</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;">
+                <span style="color: #9CA3AF;">Plan Asignado:</span>
+                <span style="color: #10B981; font-weight: bold;">Prueba Gratuita (7 Días)</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 13px;">
+                <span style="color: #9CA3AF;">Cupo Máximo:</span>
+                <strong style="color: white;">Hasta 3 Meseros o Mesas Virtuales</strong>
+              </div>
+            </div>
+
+            <h4 style="color: white; font-size: 15px; margin-bottom: 12px; text-align: center;">📲 Descarga la App RapiMesa para tu Restaurante</h4>
+            <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px;">
+              <a href="#" onclick="alert('Descargando instalador de RapiMesa para Android...'); return false;" style="background: #E25822; color: white; text-decoration: none; padding: 12px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 14px rgba(226,88,34,0.4);">
+                <span>🤖</span> Descargar para Android (APK / Play Store)
+              </a>
+              <a href="#" onclick="alert('Descarga en App Store para iOS próximamente disponible.'); return false;" style="background: #2D323A; color: white; text-decoration: none; padding: 12px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid #444;">
+                <span>🍏</span> Descargar para iOS (App Store)
+              </a>
+            </div>
+
+            <p style="color: #9CA3AF; font-size: 12px; text-align: center; margin-top: 10px;">
+              ℹ️ Abre la aplicación en tu celular o tablet de mesa e inicia sesión con tu usuario <strong>${payload.email}</strong> para entrar a tu Panel de Administrador y asignar meseros o mesas.
+            </p>
+          `;
+          document.getElementById('registerForm').reset();
+        } else {
+          throw new Error(data.error || 'Error al procesar el registro.');
+        }
+      } catch (err) {
+        alertBox.style.display = 'block';
+        alertBox.style.background = 'rgba(239, 68, 68, 0.15)';
+        alertBox.style.border = '1px solid #EF4444';
+        alertBox.style.color = '#EF4444';
+        alertBox.style.padding = '14px';
+        alertBox.style.borderRadius = '12px';
+        alertBox.innerHTML = `<strong>Error de registro:</strong> ${err.message}`;
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Completar Registro y Activar Cuenta';
+      }
+    }
+  </script>
+</body>
+</html>

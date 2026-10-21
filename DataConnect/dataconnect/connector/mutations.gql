@@ -1,0 +1,221 @@
+# Mutations for Restaurant App
+
+mutation CreateUser($id: String!, $name: String!, $email: String!, $role: String!, $phone: String, $restaurantId: String, $subscriptionPlanId: UUID, $adminId: String) @auth(level: USER) {
+  user_insert(data: {
+    id: $id,
+    name: $name,
+    email: $email,
+    role: $role,
+    phone: $phone,
+    restaurantId: $restaurantId
+    subscriptionPlanId: $subscriptionPlanId
+    adminId: $adminId
+  })
+}
+
+mutation CreateRestaurant($name: String!, $tableCount: Int!, $adminId: String!) @auth(level: USER) {
+  restaurant_insert(data: {
+    name: $name,
+    tableCount: $tableCount,
+    adminId: $adminId
+  })
+}
+
+mutation CreateOrder($restaurantId: UUID!, $waiterId: String!, $tableId: UUID, $orderType: String, $customerName: String, $customerPhone: String, $totalAmount: Float!, $comments: String) @auth(level: USER) {
+  order_insert(data: {
+    restaurantId: $restaurantId,
+    waiterId: $waiterId,
+    tableId: $tableId,
+    orderType: $orderType,
+    customerName: $customerName,
+    customerPhone: $customerPhone,
+    totalAmount: $totalAmount,
+    status: "sent",
+    comments: $comments
+  })
+}
+
+mutation UpdateOrderStatus($id: UUID!, $status: String!, $confirmedAt: Timestamp, $cookingStartedAt: Timestamp, $readyAt: Timestamp) @auth(level: USER) {
+  order_update(id: $id, data: {
+    status: $status,
+    confirmedAt: $confirmedAt,
+    cookingStartedAt: $cookingStartedAt,
+    readyAt: $readyAt
+  })
+}
+
+mutation UpdateUser($id: String!, $name: String, $phone: String, $role: String, $restaurantId: String, $subscriptionPlanId: UUID, $adminId: String) @auth(level: USER) {
+  user_update(id: $id, data: {
+    name: $name,
+    phone: $phone,
+    role: $role,
+    restaurantId: $restaurantId,
+    subscriptionPlanId: $subscriptionPlanId,
+    adminId: $adminId
+  })
+}
+
+mutation DeleteUser($id: String!) @auth(level: USER) {
+  user_delete(id: $id)
+}
+
+mutation CreateMenuCategory($restaurantId: UUID!, $name: String!, $iconUrl: String, $sortOrder: Int!) @auth(level: USER) {
+  menuCategory_insert(data: {
+    restaurantId: $restaurantId,
+    name: $name,
+    iconUrl: $iconUrl,
+    sortOrder: $sortOrder
+  })
+}
+
+mutation CreateMenuItem($categoryId: UUID!, $name: String!, $description: String, $price: Float!, $imageUrl: String) @auth(level: USER) {
+  menuItem_insert(data: {
+    categoryId: $categoryId,
+    name: $name,
+    description: $description,
+    price: $price,
+    imageUrl: $imageUrl
+  })
+}
+
+mutation CreateTable($restaurantId: UUID!, $identifier: String!) @auth(level: USER) {
+  table_insert(data: {
+    restaurantId: $restaurantId,
+    identifier: $identifier,
+    status: "libre"
+  })
+}
+
+mutation AddOrderItem($orderId: UUID!, $productId: String!, $name: String!, $quantity: Int!, $price: Float!, $extras: String, $kitchenNotes: String) @auth(level: USER) {
+  orderItem_insert(data: {
+    orderId: $orderId,
+    productId: $productId,
+    name: $name,
+    quantity: $quantity,
+    price: $price,
+    extras: $extras,
+    kitchenNotes: $kitchenNotes
+  })
+}
+
+# Updates
+mutation UpdateTable($id: UUID!, $identifier: String, $status: String) @auth(level: USER) {
+  table_update(id: $id, data: { identifier: $identifier, status: $status })
+}
+
+mutation UpdateMenuCategory($id: UUID!, $name: String, $iconUrl: String, $sortOrder: Int) @auth(level: USER) {
+  menuCategory_update(id: $id, data: { name: $name, iconUrl: $iconUrl, sortOrder: $sortOrder })
+}
+
+mutation UpdateMenuItem($id: UUID!, $name: String, $description: String, $price: Float, $imageUrl: String, $isAvailable: Boolean) @auth(level: USER) {
+  menuItem_update(id: $id, data: { name: $name, description: $description, price: $price, imageUrl: $imageUrl, isAvailable: $isAvailable })
+}
+
+# Deletes
+mutation DeleteTable($id: UUID!) @auth(level: USER) {
+  table_delete(id: $id)
+}
+
+mutation DeleteMenuCategory($id: UUID!) @auth(level: USER) {
+  menuCategory_delete(id: $id)
+}
+
+mutation DeleteMenuItem($id: UUID!) @auth(level: USER) {
+  menuItem_delete(id: $id)
+}
+
+mutation CreateSubscriptionPlan($name: String!, $pricePerMonth: Float!, $maxRestaurants: Int!, $maxAdmins: Int!, $maxWaiters: Int!) @auth(level: USER) {
+  subscriptionPlan_insert(data: {
+    name: $name,
+    pricePerMonth: $pricePerMonth,
+    maxRestaurants: $maxRestaurants,
+    maxAdmins: $maxAdmins,
+    maxWaiters: $maxWaiters
+  })
+}
+
+mutation UpdateSubscriptionPlan($id: UUID!, $maxAdmins: Int, $maxWaiters: Int, $maxRestaurants: Int, $pricePerMonth: Float) @auth(level: USER) {
+  subscriptionPlan_update(id: $id, data: {
+    maxAdmins: $maxAdmins,
+    maxWaiters: $maxWaiters,
+    maxRestaurants: $maxRestaurants,
+    pricePerMonth: $pricePerMonth
+  })
+}
+
+mutation DeleteSubscriptionPlan($id: UUID!) @auth(level: USER) {
+  subscriptionPlan_delete(id: $id)
+}
+
+# ===========================================================================
+# PUSH NOTIFICATIONS
+# ===========================================================================
+#
+# El dispositivo se registra una vez y después solo se "toca" (heartbeat).
+# El `lastSeenAt` es lo que permite saber si un token sigue vivo.
+
+# Alta de un dispositivo (solo si no existía).
+mutation RegisterPushDevice($id: UUID!, $token: String!, $userId: String!, $restaurantId: String, $role: String!, $platform: String!, $deviceLabel: String) @auth(level: USER) {
+  pushDevice_insert(data: {
+    id: $id,
+    token: $token,
+    userId: $userId,
+    restaurantId: $restaurantId,
+    role: $role,
+    platform: $platform,
+    deviceLabel: $deviceLabel
+  })
+}
+
+# Heartbeat: el dispositivo volvió a abrir la app.
+# Se actualizan SIEMPRE todos los campos (el backend los fusiona antes) para
+# no dejar valores nulos en columnas NOT NULL.
+mutation UpdatePushDevice($id: UUID!, $token: String!, $userId: String!, $restaurantId: String, $role: String!, $platform: String!, $deviceLabel: String, $isActive: Boolean!, $lastSeenAt: Timestamp!) @auth(level: USER) {
+  pushDevice_update(id: $id, data: {
+    token: $token,
+    userId: $userId,
+    restaurantId: $restaurantId,
+    role: $role,
+    platform: $platform,
+    deviceLabel: $deviceLabel,
+    isActive: $isActive,
+    lastSeenAt: $lastSeenAt
+  })
+}
+
+# Baja de un dispositivo (el usuario cerró sesión o la app lo pidió).
+mutation DeactivatePushDevice($id: UUID!, $lastSeenAt: Timestamp!) @auth(level: USER) {
+  pushDevice_update(id: $id, data: {
+    isActive: false,
+    lastSeenAt: $lastSeenAt
+  })
+}
+
+# Borrado definitivo del dispositivo (token muerto, pruebas, baja del usuario).
+mutation DeletePushDevice($id: UUID!) @auth(level: USER) {
+  pushDevice_delete(id: $id)
+}
+
+# Registro de un push enviado (auditoría + diagnóstico).
+mutation CreatePushMessage($id: UUID!, $eventType: String!, $deliveryMode: String!, $restaurantId: String, $senderUserId: String, $senderRole: String, $audience: String!, $targetUserId: String, $topic: String, $title: String, $body: String, $payload: String, $status: String!, $targetCount: Int!, $successCount: Int!, $failureCount: Int!, $providerMessageId: String) @auth(level: USER) {
+  pushMessage_insert(data: {
+    id: $id,
+    eventType: $eventType,
+    deliveryMode: $deliveryMode,
+    restaurantId: $restaurantId,
+    senderUserId: $senderUserId,
+    senderRole: $senderRole,
+    audience: $audience,
+    targetUserId: $targetUserId,
+    topic: $topic,
+    title: $title,
+    body: $body,
+    payload: $payload,
+    status: $status,
+    targetCount: $targetCount,
+    successCount: $successCount,
+    failureCount: $failureCount,
+    providerMessageId: $providerMessageId
+  })
+}
+

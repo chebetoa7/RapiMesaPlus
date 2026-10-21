@@ -3,10 +3,39 @@ node_modules/
 api/node_modules/
 dist/
 api/dist/
+lib/
+DataConnect/api/lib/
 .env
 api/.env
 api/key/
 *.log
+
+# Credenciales de Firebase / Google Cloud.
+# NUNCA deben subirse al repositorio: la llave da control total del proyecto.
+# En Cloud Functions no hace falta: el runtime provee Application Default Credentials.
+*firebase-adminsdk*.json
+serviceAccountKey.json
+*service-account*.json
+gcloud-key.json
+
+# Registro de dispositivos push (tokens FCM). No debe subirse: son tokens de
+# dispositivos reales de los clientes.
+.push-devices.json
+.push-devices.json.tmp
+
+# Flutter Web (build generado)
+RapiMesaFlutter/build/
+DataConnect/api/public/app/
+
+# Estado local de herramientas: no forman parte del proyecto.
+# .firebase/  = caché de Firebase Hosting
+# .opencode/  = base de datos y ajustes del agente (sesiones, memoria)
+.firebase/
+.opencode/
+
+# Copia antigua de la API que quedó dentro de DataConnect/dataconnect/.
+# El código vivo está en DataConnect/api/; esta copia es código muerto.
+DataConnect/dataconnect/api/
 
 # MAUI / .NET
 [Bb]in/

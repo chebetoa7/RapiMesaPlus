@@ -1,0 +1,18 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      SOLO EN BUILD DE DEBUG.
+
+      Permite conexiones HTTP sin cifrar (cleartext) para que la app pueda
+      hablar con un backend local o de pruebas en la red del restaurante
+      (por ejemplo http://192.168.0.136:3000) o con el alias del emulador
+      de Android (http://10.0.2.2:3000).
+
+      En Android 9 (API 28) y superiores el cleartext está bloqueado por
+      defecto. El manifest de `main` NO habilita esta opción, de modo que las
+      builds de release quedan obligadas a usar HTTPS.
+    -->
+    <application
+        android:usesCleartextTraffic="true"
+        tools:replace="android:usesCleartextTraffic"
+        tools:ignore="CleartextTraffic" />
+</manifest>

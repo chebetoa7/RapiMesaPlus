@@ -1,0 +1,157 @@
+type User @table {
+  id: String! @col(name: "user_id")
+  name: String!
+  email: String!
+  role: String! 
+  phone: String
+  restaurantId: String
+  subscriptionPlanId: UUID
+  adminId: String
+}
+
+type Restaurant @table {
+  id: UUID! @default(expr: "uuidV4()")
+  name: String!
+  logoUrl: String
+  admin: User! 
+  tableCount: Int!
+}
+
+type Table @table {
+  id: UUID! @default(expr: "uuidV4()")
+  restaurant: Restaurant!
+  identifier: String!
+  status: String! 
+}
+
+type Order @table {
+  id: UUID! @default(expr: "uuidV4()")
+  restaurant: Restaurant!
+  waiter: User!
+  table: Table
+  orderType: String! @default(expr: "'TABLE'")
+  customerName: String
+  customerPhone: String
+  status: String! 
+  totalAmount: Float!
+  comments: String
+  incidents: String
+  createdAt: Timestamp! @default(expr: "request.time")
+  confirmedAt: Timestamp
+  cookingStartedAt: Timestamp
+  readyAt: Timestamp
+  closedAt: Timestamp
+}
+
+type OrderItem @table {
+  id: UUID! @default(expr: "uuidV4()")
+  order: Order!
+  productId: String!
+  name: String!
+  quantity: Int!
+  price: Float!
+  extras: String
+  kitchenNotes: String
+}
+
+type MenuCategory @table {
+  id: UUID! @default(expr: "uuidV4()")
+  restaurant: Restaurant!
+  name: String!
+  iconUrl: String
+  sortOrder: Int!
+}
+
+type MenuItem @table {
+  id: UUID! @default(expr: "uuidV4()")
+  category: MenuCategory!
+  name: String!
+  description: String
+  price: Float!
+  imageUrl: String
+  isAvailable: Boolean! @default(expr: "true")
+}
+
+type SubscriptionPlan @table {
+  id: UUID! @default(expr: "uuidV4()")
+  name: String!
+  pricePerMonth: Float!
+  maxRestaurants: Int!
+  maxAdmins: Int
+  maxWaiters: Int!
+  maxTables: Int
+}
+
+# ===========================================================================
+# PUSH NOTIFICATIONS
+# ===========================================================================
+#
+# Son DOS tablas y no una porque tienen ciclos de vida distintos:
+#
+# 1) PushDevice = REGISTRO de suscripciones. Una fila por dispositivo que
+#    puede recibir push. El token lo genera FCM para el DISPOSITIVO (un mismo
+#    usuario puede tener varios: su iPad de mesa, su iPhone, su Chrome).
+#    `lastSeenAt` es la columna más importante: si hace mucho que el
+#    dispositivo no se re-registra, su token está muerto y hay que podarlo.
+#
+# 2) PushMessage = LOG de envíos. Una fila por push enviado: quién lo mandó,
+#    a qué audiencia, en qué modo (silencioso o visible) y qué pasó.
+#    Es la auditoría y la herramienta de diagnóstico ("¿llegó o no?").
+#
+# NOTA de privacidad: el admin SDK de DataConnect salta el @auth del esquema,
+# así que el aislamiento por restaurante depende del código del endpoint
+# (siempre requireAdmin + filtro por restaurantId).
+
+type PushDevice @table {
+  id: UUID! @default(expr: "uuidV4()")
+  # Token FCM del dispositivo (lo genera Firebase, no el usuario).
+  token: String!
+  # Usuario que tiene el dispositivo abierto.
+  userId: String!
+  # Restaurante al que pertenece. String (no relación) para poder registrar
+  # un dispositivo antes de resolver el restaurante, igual que User.restaurantId.
+  restaurantId: String
+  # admin | kitchen | waiter | table
+  role: String!
+  # web | ios | android
+  platform: String!
+  # Texto legible: "iPad de Mesa 5", "Chrome 150", "iPhone de José"
+  deviceLabel: String
+  isActive: Boolean! @default(expr: "true")
+  # Última vez que el dispositivo se registró (heartbeat).
+  lastSeenAt: Timestamp! @default(expr: "request.time")
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type PushMessage @table {
+  id: UUID! @default(expr: "uuidV4()")
+  # menu_updated | new_order | staff_call | ...
+  eventType: String!
+  # silent (data-only, sin notificación del sistema) | visible (con título y cuerpo)
+  deliveryMode: String!
+  restaurantId: String
+  # QUIÉN originó la acción: el admin que borró el platillo.
+  senderUserId: String
+  senderRole: String
+  # A QUIÉN va dirigido: waiters | kitchen | admins | tables | all | device
+  audience: String!
+  # Si fue dirigido a una persona concreta, su id.
+  targetUserId: String
+  # Tópico de FCM usado (si aplica).
+  topic: String
+  title: String
+  body: String
+  # JSON serializado con lo que se envió EXACTO (auditoría).
+  payload: String
+  # sent | partial | failed
+  status: String!
+  # Cuántos dispositivos se intentó notificar.
+  targetCount: Int! @default(expr: "0")
+  # Cuántos aceptó FCM. NO es "entregado": FCM no expone si el usuario lo vio.
+  successCount: Int! @default(expr: "0")
+  failureCount: Int! @default(expr: "0")
+  # Id que devuelve FCM: projects/.../messages/... (para correlacionar con
+  # las métricas de la consola de Firebase).
+  providerMessageId: String
+  createdAt: Timestamp! @default(expr: "request.time")
+}
