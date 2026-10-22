@@ -86,7 +86,12 @@ jobs:
           APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
+
+          # El keychain con RUTA ABSOLUTA: en los runners una ruta relativa se
+          # resuelve contra otro sitio y `security import` falla con errSecParam
+          # ("One or more parameters passed to a function were not valid").
+          KEYCHAIN="$RUNNER_TEMP/build.keychain"
 
           echo "▶ Longitud del base64 recibido: ${#APPLE_CERT_P12} (esperado 4304)"
           if ! printf '%s' "$APPLE_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12" 2>/dev/null; then
@@ -105,41 +110,63 @@ jobs:
           fi
           echo "✅ .p12 válido y contraseña correcta"
 
-          security create-keychain -p actions build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p actions build.keychain
+          # ───────────────────────────────────────────────────────────────────
+          # IMPORTAR
+          #
+          # NO se cambia el keychain por defecto del runner: con
+          # `security default-keychain -s` el runner queda en un estado raro y
+          # la importación falla con errSecParam. Se usa -k en cada comando.
+          #
+          # El .p12 es un PKCS#12: importarlo con "-t cert" hace que macOS
+          # responda "Import/Export format unsupported" y no importe nada.
+          # ───────────────────────────────────────────────────────────────────
+          rm -f "$KEYCHAIN" "$KEYCHAIN-db"
+          security create-keychain -p actions "$KEYCHAIN"
+          security unlock-keychain -p actions "$KEYCHAIN"
 
-          # ⚠️  SIN "-t cert": un .p12 es un PKCS#12, no un certificado DER.
-          #     Con "-t cert" macOS responde
-          #     "SecKeychainItemImport: Import/Export format unsupported"
-          #     e importa NADA.
           security import "$RUNNER_TEMP/cert.p12" \
-            -k build.keychain \
+            -k "$KEYCHAIN" \
             -P "$APPLE_CERT_PASSWORD" \
             -A
+          IMPORT_OK=$?
+
+          if [ $IMPORT_OK -ne 0 ]; then
+            echo "::warning::El primer import falló (código $IMPORT_OK). Reintentando."
+            security unlock-keychain -p actions "$KEYCHAIN" || true
+            security import "$RUNNER_TEMP/cert.p12" \
+              -k "$KEYCHAIN" \
+              -P "$APPLE_CERT_PASSWORD" \
+              -A
+            IMPORT_OK=$?
+          fi
+
+          if [ $IMPORT_OK -ne 0 ]; then
+            echo "::error::No se pudo importar el .p12 en el keychain del runner."
+            echo "::error::Suele ser que el secreto APPLE_CERT_P12 está truncado o que la contraseña no es la del .p12."
+            exit 1
+          fi
 
           # CADENA DE CONFIANZA: sin el "Apple Worldwide Developer Relations
           # CA (G3)" el certificado se marca como NO CONFIABLE y codesign
           # falla después con "no contiene una identidad válida".
           curl -sL -o "$RUNNER_TEMP/AppleWWDRCAG3.cer" \
             https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
-          security import "$RUNNER_TEMP/AppleWWDRCAG3.cer" -k build.keychain
+          security import "$RUNNER_TEMP/AppleWWDRCAG3.cer" -k "$KEYCHAIN" || true
 
           # Sin esto, el firma de códigos no puede leer la clave privada.
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
-            -s -k actions build.keychain
+            -s -k actions "$KEYCHAIN" || true
 
           echo "--- identidades de firma en el runner ---"
-          security find-identity -v -p codesigning
-          # Comprobación temprana: si no hay identidad, el build fallaría más
-          # tarde con un error de codesign mucho menos claro.
-          if ! security find-identity -v -p codesigning | grep -q "Apple Distribution"; then
+          security find-identity -v -p codesigning "$KEYCHAIN"
+          if ! security find-identity -v -p codesigning "$KEYCHAIN" | grep -q "Apple Distribution"; then
             echo "::error::No hay ninguna identidad de firma válida en el keychain del runner."
             exit 1
           fi
 
           rm -f "$RUNNER_TEMP/cert.p12"
+          echo "✅ Certificado importado y verificado"
 
       - name: Instalar perfil de provisión
         run: |
@@ -184,7 +211,7 @@ jobs:
             --build-number="$BUILD_NUMBER" \
             --export-options-plist=ios/ExportOptions.plist
         env:
-          KEYCHAIN_PATH: build.keychain
+          KEYCHAIN_PATH: ${{ runner.temp }}/build.keychain
 
       - name: Subir artefacto
         uses: actions/upload-artifact@v4
@@ -205,7 +232,7 @@ jobs:
             --apiKey "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
             --apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
         env:
-          KEYCHAIN_PATH: build.keychain
+          KEYCHAIN_PATH: ${{ runner.temp }}/build.keychain
 
       - name: Limpiar
         if: always()
