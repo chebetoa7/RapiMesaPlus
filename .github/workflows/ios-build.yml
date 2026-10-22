@@ -1,0 +1,65 @@
+name: iOS Build
+
+# Compila la app para iOS y sube el .app como artefacto.
+#
+# Este workflow NO necesita certificados ni perfiles: sirve para comprobar
+# que el proyecto compila en CI y tener el .app a mano.
+#
+# Para un IPA firmado (instalable en un iPad) o para subir a TestFlight,
+# usa el workflow "iOS TestFlight".
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'RapiMesaFlutter/**'
+      - '.github/workflows/ios-build.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compilar iOS (sin firmar)
+    runs-on: macos-14
+    timeout-minutes: 45
+
+    defaults:
+      run:
+        working-directory: RapiMesaFlutter
+
+    steps:
+      - name: Clonar
+        uses: actions/checkout@v4
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # La misma versión que usas en local: 3.19.6 (Dart 3.3.4).
+          flutter-version: '3.19.6'
+          channel: stable
+          cache: true
+
+      - name: Dependencias
+        run: flutter pub get
+
+      - name: Compilar (sin firmar)
+        run: flutter build ios --release --no-codesign --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }}
+
+      - name: Subir artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: RapiMesa-ios-unsigned
+          path: RapiMesaFlutter/build/ios/iphoneos/Runner.app
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Resumen
+        run: |
+          echo "### Build iOS sin firmar ✅" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Compilado desde el commit \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Para instalarlo en un iPad necesitas un IPA firmado: usa el workflow **iOS TestFlight**." >> "$GITHUB_STEP_SUMMARY"

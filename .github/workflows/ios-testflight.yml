@@ -1,0 +1,179 @@
+name: iOS TestFlight
+
+# Genera un IPA firmado y opcionalmente lo sube a TestFlight.
+#
+# ── CONFIGURACIÓN NECESARIA (una sola vez) ──────────────────────────────
+#
+# 1) En Apple Developer (https://developer.apple.com/account/resources/certificates):
+#    Crea un certificado de tipo "Apple Distribution" y expórtalo como .p12
+#    (Keychain > Certificate Assistant > Exportar). Codifícalo en base64:
+#        base64 -i Cert.p12 | pbcopy
+#
+# 2) Descarga el perfil de provisión (.mobileprovision) y codifícalo:
+#        base64 -i Perfil.mobileprovision | pbcopy
+#
+# 3) En App Store Connect > Usuarios y acceso > Claves de API:
+#    Crea una clave (Apple App Store Connect API), descarga el .p8 y anota
+#    el Key ID y el Issuer ID. Codifica el .p8:
+#        base64 -i AuthKey_XXXXXXXXXX.p8 | pbcopy
+#
+# 4) Guárdalos como Secrets del repo:
+#    Settings (en el repo) > Secrets and variables > Actions > New repository secret
+#      APPLE_CERT_P12            → el .p12 en base64
+#      APPLE_CERT_PASSWORD       → la contraseña con la que exportaste el .p12
+#      APPLE_PROVISIONING_PROFILE→ el .mobileprovision en base64
+#      APP_STORE_CONNECT_KEY_P8  → el .p8 en base64
+#      APP_STORE_CONNECT_KEY_ID  → Key ID (10 caracteres)
+#      APP_STORE_CONNECT_ISSUER_ID → Issuer ID (UUID)
+#
+# ⚠️  OJO con el bundle id: el proyecto usa "com.example.rapimesaFlutter",
+#    que Apple NO acepta (el prefijo com.example está reservado). Para
+#    subir a TestFlight hay que cambiarlo por uno propio en los 3 sitios:
+#      - ios/Runner.xcodeproj/project.pbxproj
+#      - ios/Runner/GoogleService-Info.plist  (BUNDLE_ID)
+#      - lib/firebase_options.dart             (ios > bundleId)
+#    y registrar ese App ID en Apple Developer + en la consola de Firebase.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'RapiMesaFlutter/**'
+      - '.github/workflows/ios-testflight.yml'
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: 'Subir a TestFlight'
+        type: boolean
+        default: true
+      build_number:
+        description: 'Número de build (deja 0 para usar el del commit)'
+        type: string
+        default: '0'
+
+concurrency:
+  group: ios-testflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: IPA firmado
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    defaults:
+      run:
+        working-directory: RapiMesaFlutter
+
+    steps:
+      - name: Clonar
+        uses: actions/checkout@v4
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.6'
+          channel: stable
+          cache: true
+
+      - name: Dependencias
+        run: flutter pub get
+
+      - name: Importar certificado de firma
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.APPLE_CERT_P12 }}" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          security import "$RUNNER_TEMP/cert.p12" \
+            -k build.keychain \
+            -P "${{ secrets.APPLE_CERT_PASSWORD }}" \
+            -A -t cert
+          # Sin esto, el firma de códigos no puede leer la clave privada.
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k actions build.keychain
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      - name: Instalar perfil de provisión
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.APPLE_PROVISIONING_PROFILE }}" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$RUNNER_TEMP/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/"
+          rm -f "$RUNNER_TEMP/profile.mobileprovision"
+
+      - name: Comprobar el bundle id
+        run: |
+          set -euo pipefail
+          BUNDLE_ID=$(grep -m1 'PRODUCT_BUNDLE_IDENTIFIER = ' ios/Runner.xcodeproj/project.pbxproj \
+            | sed 's/.*= //;s/;//' | tr -d ' ')
+          echo "Bundle id: $BUNDLE_ID"
+          if [[ "$BUNDLE_ID" == com.example.* ]]; then
+            echo "::error::El bundle id '$BUNDLE_ID' es de ejemplo y Apple no lo acepta para TestFlight."
+            echo "::error::Cámbialo en ios/Runner.xcodeproj/project.pbxproj, ios/Runner/GoogleService-Info.plist (BUNDLE_ID) y lib/firebase_options.dart (ios > bundleId), y registra ese App ID en Apple Developer y en la consola de Firebase."
+            exit 1
+          fi
+
+      - name: Entitlement de APNs para distribución
+        run: |
+          set -euo pipefail
+          # Con un certificado de Distribution, APNs usa el endpoint de
+          # PRODUCCIÓN. Si el entitlement dice "development", la app se firma
+          # pero el push NO llega en TestFlight (se queda en el sandbox).
+          # En local (debug) se deja "development" a propósito.
+          sed -i '' 's|<string>development</string>|<string>production</string>|' \
+            ios/Runner/Runner.entitlements
+          grep -A1 'aps-environment' ios/Runner/Runner.entitlements || true
+
+      - name: Firmar y exportar IPA
+        run: |
+          set -euo pipefail
+          BUILD_NUMBER="${{ inputs.build_number }}"
+          if [ "$BUILD_NUMBER" = "0" ] || [ -z "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER="${{ github.run_number }}"
+          fi
+          flutter build ipa --release \
+            --build-name=1.0.$BUILD_NUMBER \
+            --build-number="$BUILD_NUMBER" \
+            --export-options-plist=ios/ExportOptions.plist
+        env:
+          KEYCHAIN_PATH: build.keychain
+
+      - name: Subir artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: RapiMesa-ipa
+          path: RapiMesaFlutter/build/ios/ipa/*.ipa
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Subir a TestFlight
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.upload == true }}
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.APP_STORE_CONNECT_KEY_P8 }}" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+          xcrun altool --upload-app \
+            -f build/ios/ipa/*.ipa \
+            -t ios \
+            --apiKey "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
+            --apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
+        env:
+          KEYCHAIN_PATH: build.keychain
+
+      - name: Limpiar
+        if: always()
+        run: |
+          security delete-keychain build.keychain || true
+          rm -f "$RUNNER_TEMP/AuthKey.p8" || true
+
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "### iOS TestFlight"
+            echo ""
+            echo "- Commit: \`${{ github.sha }}\`"
+            echo "- Artefacto: **RapiMesa-ipa**"
+          } >> "$GITHUB_STEP_SUMMARY"

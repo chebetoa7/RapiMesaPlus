@@ -1,4 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      Obligatorio a partir de Android 13 (API 33) para poder MOSTRAR las
+      notificaciones push. Sin este permiso el usuario tiene que concede
+      el permiso a mano y las notificaciones no aparecen (Android 13
+      bloquea las notificaciones por defecto en las apps recién instaladas).
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="rapimesa_flutter"
         android:name="${applicationName}"

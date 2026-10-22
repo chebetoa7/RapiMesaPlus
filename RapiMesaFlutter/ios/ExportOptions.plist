@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Opciones de exportación del IPA (las usa "flutter build ipa" con el
+  argumento export-options-plist apuntando a este archivo).
+
+  - method "ad-hoc"  → el IPA se puede instalar directamente en los iPads
+                        que estén en el perfil de provisión (sin TestFlight).
+                        Cámbialo a "app-store" cuando quieras subir a TestFlight.
+  - teamID           → tu Apple Developer Team ID (10 caracteres).
+  - provisioningProfiles → nombre EXACTO del perfil en tu cuenta de Apple.
+-->
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>ad-hoc</string>
+	<key>teamID</key>
+	<string>TU_TEAM_ID</string>
+	<key>signingStyle</key>
+	<string>manual</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.example.rapimesaFlutter</key>
+		<string>RapiMesa AdHoc</string>
+	</dict>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>compileBitcode</key>
+	<false/>
+</dict>
+</plist>

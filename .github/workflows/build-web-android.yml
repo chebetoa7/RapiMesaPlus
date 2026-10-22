@@ -1,0 +1,67 @@
+name: Build web y Android
+
+# Compila la web (artefacto) y el APK de Android (artefacto).
+#
+# La web se compila con API_BASE_URL=/ (mismo origen): así el navegador
+# llama a /api/... y no hay CORS. Funciona igual detrás de un túnel HTTPS
+# o de un rewrite de Hosting.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'RapiMesaFlutter/**'
+      - '.github/workflows/web-build.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: build-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compilar web y Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    defaults:
+      run:
+        working-directory: RapiMesaFlutter
+
+    steps:
+      - name: Clonar
+        uses: actions/checkout@v4
+
+      - name: Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.6'
+          channel: stable
+          cache: true
+
+      - name: Dependencias
+        run: flutter pub get
+
+      - name: Build web
+        run: flutter build web --release --base-href /app/ --dart-define=API_BASE_URL=/
+
+      # Un APK de release necesita un keystore propio configurado en
+      # android/key.properties (que NO se sube). El de debug se firma solo
+      # y se puede instalar en cualquier dispositivo físico para probar.
+      - name: Build APK (Android debug, instalable sin configurar nada)
+        run: flutter build apk --debug --dart-define=API_BASE_URL=http://192.168.0.136:3000
+
+      - name: Subir web
+        uses: actions/upload-artifact@v4
+        with:
+          name: RapiMesa-web
+          path: RapiMesaFlutter/build/web
+          retention-days: 14
+
+      - name: Subir APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RapiMesa-apk
+          path: RapiMesaFlutter/build/app/outputs/flutter-apk/*.apk
+          retention-days: 14
+          if-no-files-found: warn

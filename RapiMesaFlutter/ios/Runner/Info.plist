@@ -24,6 +24,18 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<!--
+		  Necesario para que las notificaciones push (FCM) lleguen con la app
+		  en segundo plano o cerrada. Sin esto, iOS entrega el push solo si la
+		  app está en primer plano.
+		  remote-notification: reception de push en silencio.
+		  fetch: permite recibir datos en segundo plano.
+		-->
+		<string>remote-notification</string>
+		<string>fetch</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
