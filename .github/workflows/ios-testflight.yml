@@ -86,14 +86,39 @@ jobs:
           security create-keychain -p actions build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p actions build.keychain
+
+          # ⚠️  SIN "-t cert": un .p12 es un PKCS#12, no un certificado DER.
+          #     Con "-t cert" macOS responde
+          #     "SecKeychainItemImport: Import/Export format unsupported"
+          #     e importa NADA, y el paso falla con
+          #     "One or more parameters passed to a function were not valid".
           security import "$RUNNER_TEMP/cert.p12" \
             -k build.keychain \
             -P "${{ secrets.APPLE_CERT_PASSWORD }}" \
-            -A -t cert
+            -A
+
+          # CADENA DE CONFIANZA: sin el "Apple Worldwide Developer Relations
+          # CA (G3)" el certificado se marca como NO CONFIABLE y codesign
+          # falla después con "no contiene una identidad válida".
+          curl -sL -o "$RUNNER_TEMP/AppleWWDRCAG3.cer" \
+            https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
+          security import "$RUNNER_TEMP/AppleWWDRCAG3.cer" -k build.keychain
+
           # Sin esto, el firma de códigos no puede leer la clave privada.
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
             -s -k actions build.keychain
+
+          echo "--- identidades de firma en el runner ---"
+          security find-identity -v -p codesigning
+          # Comprobación temprana: si no hay identidad, el build fallaría más
+          # tarde con un error de codesign mucho menos claro.
+          if ! security find-identity -v -p codesigning | grep -q "Apple Distribution"; then
+            echo "::error::No hay ninguna identidad de firma válida en el keychain del runner."
+            echo "::error::Revisa que el secreto APPLE_CERT_P12 sea el .p12 completo y que APPLE_CERT_PASSWORD sea correcto."
+            exit 1
+          fi
+
           rm -f "$RUNNER_TEMP/cert.p12"
 
       - name: Instalar perfil de provisión
