@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>474513328438-8emv1tp8vapv5bqidfgmomk12djugtv9.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.474513328438-8emv1tp8vapv5bqidfgmomk12djugtv9</string>
+	<key>API_KEY</key>
+	<string>AIzaSyBzNViOOBVg9PfxjjlV1bQgdv983px1vNw</string>
+	<key>GCM_SENDER_ID</key>
+	<string>474513328438</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.example.rapimesaFlutter</string>
+	<key>PROJECT_ID</key>
+	<string>restaurantapp-3007c</string>
+	<key>STORAGE_BUCKET</key>
+	<string>restaurantapp-3007c.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:474513328438:ios:1967a9e212c7a75aa8cb97</string>
+</dict>
+</plist>

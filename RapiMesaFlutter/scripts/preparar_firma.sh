@@ -45,16 +45,37 @@ csr)
 exportar)
   CER="$CSR_DIR/apple_distribution.cer"
   [ -f "$CER" ] || { echo "❌ No existe $CER"; exit 1; }
+  [ -f "$CSR_DIR/private.key" ] || { echo "❌ No existe $CSR_DIR/private.key"; exit 1; }
+
+  if [ -z "${P12_PASSWORD:-}" ]; then
+    echo "❌ Define la contraseña del .p12, por ejemplo:"
+    echo "     P12_PASSWORD='tu-contrasena' $0 exportar"
+    exit 1
+  fi
+
   echo "▶ Instalando el certificado en el llavero"
-  security import "$CER" -k ~/Library/Keychains/login.keychain-db
+  security import "$CER" -k ~/Library/Keychains/login.keychain-db -T /usr/bin/codesign
+
+  echo "▶ Generando el .p12 (certificado + clave privada)"
+  openssl pkcs12 -export \
+    -inkey "$CSR_DIR/private.key" \
+    -in "$CER" \
+    -out "$CSR_DIR/cert.p12" \
+    -name "Apple Distribution" \
+    -passout "pass:$P12_PASSWORD"
+
+  echo "▶ Instalando el .p12 en el llavero (para poder firmar en local)"
+  security import "$CSR_DIR/cert.p12" \
+    -k ~/Library/Keychains/login.keychain-db \
+    -T /usr/bin/codesign \
+    -P "$P12_PASSWORD"
+
   echo
-  echo "✅ Certificado instalado."
-  echo "  Ahora expórtalo como .p12:"
-  echo "    Abre el Llavero (Keychain Access) → busca 'Apple Distribution'"
-  echo "    → clic derecho en la CLAVE PRIVADA (no en el certificado)"
-  echo "    → 'Exportar…' → guárdalo como $CSR_DIR/cert.p12 con una contraseña"
+  echo "✅ Listo. Identidades de firma ahora:"
+  security find-identity -v -p codesigning
   echo
-  echo "  Después: ./scripts/preparar_firma.sh base64"
+  echo "  .p12 en $CSR_DIR/cert.p12"
+  echo "  Siguiente: $0 base64"
   ;;
 
 base64)
@@ -73,6 +94,11 @@ base64)
     fi
   done
   echo "Pega cada bloque en Settings → Secrets and variables → Actions."
+  ;;
+
+equipo)
+  echo "Tu Team ID: 3XW2235F4W"
+  echo "(sale del propio certificado: CN=Apple Distribution: JOSE ALBERTO DE LA CRUZ SOLANO (3XW2235F4W))"
   ;;
 
 exportoptions)
