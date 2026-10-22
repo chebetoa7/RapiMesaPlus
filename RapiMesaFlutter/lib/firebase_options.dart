@@ -63,7 +63,7 @@ class DefaultFirebaseOptions {
     projectId: 'restaurantapp-3007c',
     authDomain: 'restaurantapp-3007c.firebaseapp.com',
     storageBucket: 'restaurantapp-3007c.firebasestorage.app',
-    iosBundleId: 'com.example.rapimesaFlutter',
+    iosBundleId: 'com.rapimesa.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
