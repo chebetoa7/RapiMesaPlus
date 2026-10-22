@@ -13,15 +13,15 @@
 <plist version="1.0">
 <dict>
 	<key>method</key>
-	<string>ad-hoc</string>
+	<string>app-store</string>
 	<key>teamID</key>
-	<string>TU_TEAM_ID</string>
+	<string>PEGAR_AQUI_TU_TEAM_ID</string>
 	<key>signingStyle</key>
 	<string>manual</string>
 	<key>provisioningProfiles</key>
 	<dict>
-		<key>com.example.rapimesaFlutter</key>
-		<string>RapiMesa AdHoc</string>
+		<key>com.rapimesa.app</key>
+		<string>RapiMesa AppStore</string>
 	</dict>
 	<key>uploadSymbols</key>
 	<true/>
