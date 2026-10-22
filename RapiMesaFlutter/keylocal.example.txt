@@ -28,3 +28,16 @@ QA_PASSWORD=cambia-esta-contrasena
 #     (funciona en iOS/macOS; en Android puede no resolver .local)
 #   - Túnel HTTPS (para web):       https://tu-tunel.trycloudflare.com
 QA_API_URL=http://192.168.0.136:3000
+
+# ---------------------------------------------------------------------------
+# DOBLE CANDADO
+# ---------------------------------------------------------------------------
+# El conmutador QA solo existe si el build lleva las DOS condiciones:
+#   1. APP_ENV=qa   (lo pone scripts/build_qa.sh)
+#   2. QA_PASSWORD  (de este archivo)
+# Un build de PRODUCCIÓN (sin APP_ENV=qa) NO tiene conmutador, aunque se
+# conozca la contraseña. Así un build de QA no se puede confundir con uno de
+# producción si se despliega por error.
+#
+# ⚠️ El build web de QA lleva la contraseña DENTRO de main.dart.js.
+#    Solo para pruebas en la red local. Nunca a producción.

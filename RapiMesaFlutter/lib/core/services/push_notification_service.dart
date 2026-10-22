@@ -28,6 +28,7 @@ class PushNotificationService {
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   String? _currentToken;
   bool _initialized = false;
+  bool _permisoDenegado = false;
   Timer? _reregisterTimer;
 
   /// Restaurante y rol del último registro válido.
@@ -84,6 +85,7 @@ class PushNotificationService {
           provisional: false,
         );
         debugPrint('[FCM] Permisos de notificación: ${settings.authorizationStatus}');
+        _permisoDenegado = settings.authorizationStatus == AuthorizationStatus.denied;
       } catch (permErr) {
         debugPrint('[FCM Warning]: Permisos no concedidos o pendientes: $permErr');
       }
@@ -101,10 +103,16 @@ class PushNotificationService {
       try {
         _currentToken = await _obtainToken(vapidKey);
         if (_currentToken == null || _currentToken!.isEmpty) {
-          debugPrint(
-            '[FCM] No se obtuvo token FCM.'
-            '${kIsWeb && vapidKey.isEmpty ? ' En web hace falta la VAPID key (--dart-define=VAPID_KEY=...).' : ''}',
-          );
+          if (_permisoDenegado) {
+            debugPrint('[FCM] El navegador BLOQUEÓ las notificaciones: hay que '
+                'habilitarlas en los ajustes del sitio. Sin permiso no hay token '
+                'y no puede haber push.');
+          } else {
+            debugPrint(
+              '[FCM] No se obtuvo token FCM.'
+              '${kIsWeb && vapidKey.isEmpty ? ' (sin VAPID key propia; el SDK usa su clave por defecto)' : ''}',
+            );
+          }
         } else {
           debugPrint('[FCM] Token obtenido: $_currentToken');
         }
@@ -182,8 +190,12 @@ class PushNotificationService {
   /// llega ninguna push. El plugin solo reintenta una vez y sin esperar, así
   /// que aquí se reintenta con espera hasta que el worker esté activo.
   Future<String?> _obtainToken(String vapidKey) async {
+    // Si el permiso está denegado, reintentar no sirve de nada: no va a
+    // cambiar solo. Se intenta una vez y se avisa con claridad.
+    final intentos = _permisoDenegado ? 1 : 4;
+
     String? lastError;
-    for (int intento = 0; intento < 4; intento++) {
+    for (int intento = 0; intento < intentos; intento++) {
       if (intento > 0) {
         await Future<void>.delayed(const Duration(milliseconds: 1500));
       }
@@ -195,7 +207,7 @@ class PushNotificationService {
         lastError = 'getToken devolvió vacío';
       } catch (e) {
         lastError = e.toString();
-        debugPrint('[FCM] getToken falló (intento ${intento + 1}/4): $e');
+        debugPrint('[FCM] getToken falló (intento ${intento + 1}/$intentos): $e');
       }
     }
     debugPrint('[FCM] No se pudo obtener el token FCM. Último error: $lastError');

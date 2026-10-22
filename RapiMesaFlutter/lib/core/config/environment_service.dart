@@ -38,6 +38,18 @@ class EnvironmentService {
     defaultValue: '',
   );
 
+  /// Identifica el TIPO DE BUILD. Solo los compilados con `APP_ENV=qa`
+  /// tienen conmutador de entorno.
+  ///
+  /// Esto es un doble candado y evita el peor escenario: que un build de
+  /// QA (que lleva la contraseña embebida en el binario) se despliegue por
+  /// error en producción. Un build de producción (sin `APP_ENV=qa`) no
+  /// tiene conmutador, aunque alguien conozca la contraseña.
+  static const String buildEnvironment = String.fromEnvironment(
+    'APP_ENV',
+    defaultValue: 'production',
+  );
+
   /// URL de la API en la red local, tomada de `keylocal.txt` al compilar.
   static const String buildTimeQaUrl = String.fromEnvironment(
     'QA_API_URL',
@@ -55,7 +67,10 @@ class EnvironmentService {
   bool get esProduccion => _entorno == AppEnvironment.production;
 
   /// Si este build no trae contraseña, el conmutador QA no existe.
-  bool get qaDeshabilitado => qaPassword.isEmpty;
+  bool get qaDeshabilitado => qaPassword.isEmpty || !esBuildQa;
+
+  /// Si el binario se compiló como build de QA (`APP_ENV=qa`).
+  bool get esBuildQa => buildEnvironment.toLowerCase() == 'qa';
 
   /// URL de la API que se está usando ahora mismo.
   String get baseUrl => esQa ? _qaUrl : buildTimeBaseUrl;
