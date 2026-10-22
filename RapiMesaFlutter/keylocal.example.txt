@@ -1,0 +1,30 @@
+# ===========================================================================
+# keylocal.txt — PLANTILLA (esta SÍ se sube a git)
+# ===========================================================================
+#
+# Copia este archivo como `keylocal.txt` (sin la palabra "example") y
+# ajústalo. `keylocal.txt` está en el .gitignore: NUNCA se sube al repo.
+#
+#   cp keylocal.example.txt keylocal.txt
+#
+# El script `scripts/build_qa.sh` lee este archivo y pasa los valores al
+# build con --dart-define. Así:
+#
+#   - la contraseña NUNCA está en el código fuente ni en el repo;
+#   - el build de PRODUCCIÓN no lleva estas defines, así que el conmutador
+#     QA/PR queda completamente inerte (5 toques y no pasa nada);
+#   - solo hay un archivo que editar para cambiar la IP o la contraseña.
+#
+# Formato: CLAVE=VALOR (una por línea, sin espacios alrededor del =).
+
+# Contraseña del conmutador a modo QA.
+# Se pide al tocar 5 veces "v1.0.0 (Flutter)" en la pantalla de acceso.
+QA_PASSWORD=cambia-esta-contrasena
+
+# URL de la API en la red local (tu Mac sirviendo la API).
+# Opciones de IP (usa la primera que te sirva):
+#   - IP fija de tu Mac:            http://192.168.0.136:3000
+#   - hostname mDNS (estable):      http://MacBook-Air-de-Marco-2.local:3000
+#     (funciona en iOS/macOS; en Android puede no resolver .local)
+#   - Túnel HTTPS (para web):       https://tu-tunel.trycloudflare.com
+QA_API_URL=http://192.168.0.136:3000

@@ -5,6 +5,7 @@
   "main": "lib/function.js",
   "scripts": {
     "start": "tsx src/index.ts",
+    "start:qa": "APP_ENV=qa tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "serve": "npm run build && firebase emulators:start --only functions",

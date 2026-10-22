@@ -3,7 +3,10 @@ node_modules/
 api/node_modules/
 dist/
 api/dist/
-lib/
+# OJO: la regla "lib/" (sin barra inicial) ignoraba CUALQUIER carpeta
+# llamada lib, incluyendo RapiMesaFlutter/lib/ — que es el CÓDIGO FUENTE
+# del cliente Flutter (24 archivos .dart). El repo se subió sin el cliente.
+# Por eso aquí solo se ignora el compilado de la API, con ruta exacta.
 DataConnect/api/lib/
 .env
 api/.env
@@ -26,6 +29,11 @@ gcloud-key.json
 # Flutter Web (build generado)
 RapiMesaFlutter/build/
 DataConnect/api/public/app/
+
+# Credenciales del modo QA (contraseña del conmutador y URL de la API en la
+# red local). NUNCA se suben: la plantilla sí está en keylocal.example.txt.
+keylocal.txt
+*.local.txt
 
 # Estado local de herramientas: no forman parte del proyecto.
 # .firebase/  = caché de Firebase Hosting

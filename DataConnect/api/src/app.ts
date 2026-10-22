@@ -79,6 +79,38 @@ app.post('/api/telemetry/reset', (req, res) => {
   res.json({ success: true, message: 'Contador de peticiones reiniciado a 0' });
 });
 
+// ---------------------------------------------------------------------------
+// MODO QA: protección contra borrados accidentales
+// ---------------------------------------------------------------------------
+//
+// La app en modo QA (conmutador PR/QA de la pantalla de acceso) apunta a
+// esta misma API, y por tanto a la MISMA base de datos que producción.
+// Un "borrar Hamburguesa Doble" hecho en una prueba se borraría de verdad.
+//
+// Con APP_ENV=qa (npm run start:qa) las operaciones destructivas se rechazan
+// con un 403 explicito. Las lecturas y las altas siguen funcionando, así que
+// se puede seguir probando el flujo completo.
+//
+// IMPORTANTE: este middleware va ANTES de montar los routers. En Express gana
+// el primero que responde, así que si se registra después, los routers ya
+// atienden la petición y el bloqueo nunca se aplica.
+const APP_ENV = (process.env.APP_ENV || 'production').toLowerCase();
+if (APP_ENV === 'qa') {
+  console.warn('[QA] Modo QA activo: los borrados de menú y órdenes están deshabilitados.');
+  const bloquearBorrados = (req: any, res: any, next: any) => {
+    if (req.method === 'DELETE') {
+      return res.status(403).json({
+        error:
+          'Modo QA: los borrados están deshabilitados para no tocar los datos ' +
+          'de producción (esta API comparte la base de datos con PR).',
+      });
+    }
+    next();
+  };
+  app.use('/api/menu', bloquearBorrados);
+  app.use('/api/orders', bloquearBorrados);
+}
+
 // Configuracion de Rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/restaurants', restaurantRoutes);

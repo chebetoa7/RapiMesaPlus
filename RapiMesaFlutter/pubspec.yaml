@@ -47,6 +47,9 @@ dependencies:
   url_launcher: ^6.3.0
   http: ^1.2.2
   firebase_messaging: ^14.7.0
+  # Guarda el entorno elegido (PROD / QA) y la URL de QA en el dispositivo,
+  # para poder conmutar entre la API en la nube y la API en la red local.
+  shared_preferences: ^2.2.0
 
 dev_dependencies:
   flutter_test:
