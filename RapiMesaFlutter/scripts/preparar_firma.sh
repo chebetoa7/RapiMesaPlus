@@ -5,14 +5,15 @@
 #
 #   1. Genera el CSR (Certificate Signing Request) para el certificado
 #      "Apple Distribution".
-#   2. Codifica en base64 el .p12 y el .mobileprovision para pegarlos
+#   2. Instala el certificado en el llavero y arma el .p12.
+#   3. Codifica en base64 el .p12 y el .mobileprovision para pegarlos
 #      como secretos de GitHub.
-#   3. Rellena ios/ExportOptions.plist con tu Team ID y el bundle id.
 #
 # Uso:
 #   ./scripts/preparar_firma.sh csr        → genera el CSR
-#   ./scripts/preparar_firma.sh base64     → codifica cert.p12 y el perfil
-#   ./scripts/preparar_firma.sh exportar   → instala el .cer y exporta el .p12
+#   ./scripts/preparar_firma.sh exportar    → instala el .cer y arma el .p12
+#   ./scripts/preparar_firma.sh base64     → codifica para GitHub
+#   ./scripts/preparar_firma.sh equipo     → muestra el Team ID
 # ===========================================================================
 
 set -euo pipefail
@@ -39,7 +40,10 @@ csr)
   echo "  1. Súbelo en https://developer.apple.com/account/resources/certificates/create"
   echo "     → tipo: Apple Distribution"
   echo "  2. Descarga el .cer y guárdalo en $CSR_DIR/apple_distribution.cer"
-  echo "  3. Luego: ./scripts/preparar_firma.sh exportar"
+  echo "  3. Luego: P12_PASSWORD='...' $0 exportar"
+  echo
+  echo "  ⚠️  GUARDA private.key en un sitio seguro. Sin ella, el certificado"
+  echo "      queda inservible (es lo que pasa si se pierde el llavero)."
   ;;
 
 exportar)
@@ -53,28 +57,84 @@ exportar)
     exit 1
   fi
 
-  echo "▶ Instalando el certificado en el llavero"
-  security import "$CER" -k ~/Library/Keychains/login.keychain-db -T /usr/bin/codesign
+  # ─────────────────────────────────────────────────────────────────────────
+  # 1) CADENA DE CONFIANZA
+  #    Sin el "Apple Worldwide Developer Relations CA" (G3) instalado, el
+  #    certificado se marca como NO CONFIABLE y `security find-identity`
+  #    dice "0 valid identities found" aunque la clave esté presente.
+  # ─────────────────────────────────────────────────────────────────────────
+  WWDR="$CSR_DIR/AppleWWDRCAG3.cer"
+  if [ ! -s "$WWDR" ]; then
+    echo "▶ Descargando el CA de Apple (WWDR G3)"
+    curl -sL -o "$WWDR" https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer || true
+  fi
+  if [ -s "$WWDR" ]; then
+    security import "$WWDR" -k ~/Library/Keychains/login.keychain-db 2>&1 \
+      | grep -v "already exists" || true
+  fi
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 2) EL .p12
+  #    El .cer de Apple viene en DER (binario): hay que convertirlo a PEM.
+  #    Y el .p12 se genera con PBE-SHA1-3DES porque es lo único que el
+  #    llavero de macOS sabe leer: con el cifrado moderno de OpenSSL 3,
+  #    `security import` importa el certificado pero IGNORA la clave privada
+  #    en silencio, y la firma falla con "0 valid identities found".
+  # ─────────────────────────────────────────────────────────────────────────
+  CERT_PEM="$CSR_DIR/apple_distribution.pem"
+  if openssl x509 -inform DER -in "$CER" -out "$CERT_PEM" 2>/dev/null; then
+    echo "  (el .cer estaba en DER, convertido a PEM)"
+  else
+    cp "$CER" "$CERT_PEM"
+  fi
 
   echo "▶ Generando el .p12 (certificado + clave privada)"
+  rm -f "$CSR_DIR/cert.p12"
   openssl pkcs12 -export \
     -inkey "$CSR_DIR/private.key" \
-    -in "$CER" \
+    -in "$CERT_PEM" \
     -out "$CSR_DIR/cert.p12" \
     -name "Apple Distribution" \
-    -passout "pass:$P12_PASSWORD"
+    -passout "pass:$P12_PASSWORD" \
+    -keypbe PBE-SHA1-3DES \
+    -certpbe PBE-SHA1-3DES \
+    -macalg sha1
 
-  echo "▶ Instalando el .p12 en el llavero (para poder firmar en local)"
+  [ -s "$CSR_DIR/cert.p12" ] || { echo "❌ El .p12 salió vacío"; exit 1; }
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 3) INSTALAR EN EL LLAVERO
+  #    -A = que cualquier aplicación pueda usarlo (codesign).
+  # ─────────────────────────────────────────────────────────────────────────
+  echo "▶ Instalando en el llavero"
   security import "$CSR_DIR/cert.p12" \
     -k ~/Library/Keychains/login.keychain-db \
-    -T /usr/bin/codesign \
-    -P "$P12_PASSWORD"
+    -T /usr/bin/codesign -A -P "$P12_PASSWORD" 2>&1 \
+    | grep -v "already exists" || true
+
+  # La clave privada suelta, por si el .p12 no la trajo:
+  openssl pkcs8 -topk8 -inform PEM -outform DER -nocrypt \
+    -in "$CSR_DIR/private.key" -out "$CSR_DIR/private_pkcs8.der" 2>/dev/null || true
+  if [ -s "$CSR_DIR/private_pkcs8.der" ]; then
+    security import "$CSR_DIR/private_pkcs8.der" \
+      -k ~/Library/Keychains/login.keychain-db -T /usr/bin/codesign -A 2>&1 \
+      | grep -v "already exists" || true
+  fi
 
   echo
-  echo "✅ Listo. Identidades de firma ahora:"
+  echo "✅ Identidades de firma:"
   security find-identity -v -p codesigning
+
+  if [ "$(security find-identity -v -p codesigning 2>/dev/null | grep -c '"Apple Distribution')" -eq 0 ]; then
+    echo
+    echo "⚠️  Sigue sin identidad válida. Comprueba:"
+    echo "   - que el .cer corresponda al CSR de $CSR_DIR/certificateSigningRequest.crt"
+    echo "   - que el WWDR G3 esté en el llavero (ls $CSR_DIR/AppleWWDRCAG3.cer)"
+    exit 1
+  fi
+
   echo
-  echo "  .p12 en $CSR_DIR/cert.p12"
+  echo "  .p12 en $CSR_DIR/cert.p12 ($(du -h "$CSR_DIR/cert.p12" | cut -f1))"
   echo "  Siguiente: $0 base64"
   ;;
 
@@ -101,24 +161,12 @@ equipo)
   echo "(sale del propio certificado: CN=Apple Distribution: JOSE ALBERTO DE LA CRUZ SOLANO (3XW2235F4W))"
   ;;
 
-exportoptions)
-  TEAM="${1:-$2}"
-  echo "▶ Actualizando ios/ExportOptions.plist"
-  echo "   Team ID: $TEAM"
-  echo "   Bundle id: $BUNDLE_ID"
-  echo
-  echo "Edita a mano ios/ExportOptions.plist y pon:"
-  echo "  <key>teamID</key>            <string>$TEAM</string>"
-  echo "  <key>method</key>            <string>app-store</string>   # TestFlight"
-  echo "                                (o 'ad-hoc' para instalar directo en el iPad)"
-  echo "  <key>com.rapimesa.app</key>  <string>Nombre Exacto Del Perfil</string>"
-  ;;
-
 *)
-  echo "Uso: $0 {csr|exportar|base64}"
+  echo "Uso: $0 {csr|exportar|base64|equipo}"
   echo
   echo "  csr       Genera el CSR para subirlo en el portal de Apple"
-  echo "  exportar  Instala el .cer descargado en el llavero"
+  echo "  exportar  Instala el .cer, arma el .p12 y verifica la identidad"
   echo "  base64    Codifica cert.p12 y el .mobileprovision para GitHub"
+  echo "  equipo    Muestra el Team ID"
   ;;
 esac
