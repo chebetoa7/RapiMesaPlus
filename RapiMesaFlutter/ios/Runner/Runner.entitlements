@@ -9,11 +9,17 @@
 	  iPad real: el alta contra APNs falla con
 	  "Invalid fetch response, expected 'token' or 'Error' key".
 
-	  'development' sirve para las builds de depuración (con perfil de
-	  desarrollo). Para App Store hay que cambiarlo a 'production' o, mejor,
-	  usar el binario de distribución de APNs.
+	  'production' es lo que exige un perfil de distribución (App Store /
+	  Ad Hoc): el perfil solo autoriza el entorno de producción y, si el
+	  binario pide 'development', la firma falla con
+	  "entitlements are not permitted".
+
+	  Para depurar el push con una build de desarrollo (perfil de desarrollo)
+	  hay que poner 'development' temporalmente. El workflow de CI comprueba
+	  que el valor sea 'production' antes de archivar, así que no se puede
+	  subir a TestFlight un IPA con el entitlement del sandbox por error.
 	-->
 	<key>aps-environment</key>
-	<string>development</string>
+	<string>production</string>
 </dict>
 </plist>

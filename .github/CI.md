@@ -11,6 +11,14 @@
 Se ejecutan solos en cada `push` a `main` que toque `RapiMesaFlutter/`, y
 también se pueden lanzar a mano desde la pestaña **Actions**.
 
+> Se eliminó `.github/workflows/ios.yml` (el *"iOS starter workflow"* que genera
+> GitHub al detectar un proyecto Flutter). Corría `xcodebuild -list` en la **raíz**
+> del repo, donde no hay ningún `.xcodeproj` —el proyecto está en
+> `RapiMesaFlutter/ios/`— y además usaba `macos-latest` con un Xcode distinto al
+> del proyecto. Fallaba siempre y no aportaba nada: la compilación iOS ya la
+> cubre **iOS Build**. Para recuperarlo:
+> `git checkout <commit-anterior> -- .github/workflows/ios.yml`.
+
 ---
 
 ## 1) El primer workflow: iOS Build (sin certificados)
@@ -27,26 +35,22 @@ Sirve para:
 
 ## 2) iOS TestFlight: qué hay que preparar (una sola vez)
 
-### 2.1 Cambiar el bundle id ⚠️ (obligatorio)
+### 2.1 Bundle id (ya hecho) ✅
 
-El proyecto usa `com.example.rapimesaFlutter`. **Apple no acepta el prefijo
-`com.example`** (está reservado), así que TestFlight lo rechazaría.
+El proyecto usa **`com.rapimesa.app`** en los tres sitios que importan:
 
-Hay que cambiarlo en **3 sitios**:
-
-| Archivo | Qué cambiar |
+| Archivo | Valor |
 |---|---|
-| `ios/Runner.xcodeproj/project.pbxproj` | `PRODUCT_BUNDLE_IDENTIFIER = com.example.rapimesaFlutter` |
-| `ios/Runner/GoogleService-Info.plist` | la clave `BUNDLE_ID` |
-| `lib/firebase_options.dart` | en `ios`, el `bundleId` |
+| `ios/Runner.xcodeproj/project.pbxproj` | `PRODUCT_BUNDLE_IDENTIFIER = com.rapimesa.app` |
+| `ios/Runner/GoogleService-Info.plist` | `BUNDLE_ID = com.rapimesa.app` |
+| `lib/firebase_options.dart` | `ios → iosBundleId: 'com.rapimesa.app'` |
 
-Y registrar ese identificador en:
-- **Apple Developer** → Certificates, Identifiers & Profiles → App IDs → registrar.
-- **Firebase Console** → Project settings → Your apps → Add app → iOS → con ese
-  bundle id → descargar el `GoogleService-Info.plist` nuevo y reemplazar el del repo.
-
-El workflow **falla con un mensaje claro** si detecta un bundle id de ejemplo,
-para que no se pierda tiempo con errores raros de Apple.
+> El antiguo `com.example.rapimesaFlutter` no sirve: el prefijo `com.example`
+> está reservado y Apple lo rechaza para TestFlight.
+>
+> ⚠️ En la consola de Firebase hay que tener registrada una app iOS con ese
+> bundle id y volver a descargar el `GoogleService-Info.plist` (el `GOOGLE_APP_ID`
+> actual es el de la app antigua). Si no, FCM/Auth fallan en runtime.
 
 ### 2.2 Los secretos
 
@@ -63,10 +67,47 @@ En el repo: **Settings → Secrets and variables → Actions → New repository 
 
 ### 2.3 El perfil de provisión
 
-En `RapiMesaFlutter/ios/ExportOptions.plist` hay que poner:
-- `teamID`: tu Team ID (10 caracteres).
-- `provisioningProfiles`: el **nombre exacto** del perfil en tu cuenta de Apple.
-- `method`: `ad-hoc` (instalar directo en un iPad) o `app-store` (TestFlight).
+El proyecto está en **firma manual**: `project.pbxproj` (configuraciones
+Release y Profile del target Runner) lleva
+
+```
+CODE_SIGN_STYLE              = Manual
+DEVELOPMENT_TEAM             = 3XW2235F4W
+PROVISIONING_PROFILE_SPECIFIER = RapiMesa AppStore
+CODE_SIGN_IDENTITY           = Apple Distribution
+```
+
+así que el perfil **tiene que llamarse exactamente `RapiMesa AppStore`** y ser
+de tipo **App Store** para el App ID `com.rapimesa.app`.
+
+Crearlo (una sola vez):
+
+1. <https://developer.apple.com/account/resources/profiles/add>
+2. **App Store** → App ID `com.rapimesa.app` → certificado *Apple Distribution*.
+3. Nombre: **`RapiMesa AppStore`** → Generate → Download.
+4. Instalarlo y validarlo:
+
+```bash
+cd RapiMesaFlutter
+./scripts/preparar_firma.sh perfil ~/Downloads/RapiMesa_AppStore.mobileprovision
+```
+
+El script lo copia como `<UUID>.mobileprovision` (el nombre que espera Xcode) y
+comprueba Team ID, bundle id y entitlement de APNs. Si el perfil se llama de
+otra forma, avisa: o lo renombras en el portal o cambias
+`PROVISIONING_PROFILE_SPECIFIER` / `ExportOptions.plist`.
+
+Para el CI, además:
+
+```bash
+base64 -i ~/Downloads/RapiMesa_AppStore.mobileprovision | tr -d '\n' | pbcopy
+# → secreto APPLE_PROVISIONING_PROFILE
+```
+
+En `RapiMesaFlutter/ios/ExportOptions.plist` están:
+- `method`: `app-store` (TestFlight) o `ad-hoc` (instalar directo en un iPad).
+- `teamID`: `3XW2235F4W`.
+- `provisioningProfiles`: `com.rapimesa.app → RapiMesa AppStore`.
 
 ---
 
@@ -74,7 +115,7 @@ En `RapiMesaFlutter/ios/ExportOptions.plist` hay que poner:
 
 | Detalle | Qué hace el workflow |
 |---|---|
-| **Entitlement de APNs** | En un build firmado con certificado de **Distribution**, APNs usa el endpoint de producción. El workflow cambia `aps-environment` de `development` a `production` automáticamente. Sin esto, la app se sube a TestFlight **pero el push no llega** (se queda en el sandbox). En local sigue en `development`. |
+| **Entitlement de APNs** | `Runner.entitlements` lleva `aps-environment = production`, que es lo que autoriza un perfil de App Store (con `development` la firma falla con *entitlements are not permitted*). Para depurar push en local con un perfil de desarrollo hay que ponerlo en `development` temporalmente; el workflow **falla** si detecta `development` en el repo, para no subir un IPA con el entitlement del sandbox. |
 | **Background modes** | `Info.plist` ya declara `remote-notification` y `fetch`. Sin eso, iOS solo entrega el push con la app en primer plano. |
 | **POST_NOTIFICATIONS (Android)** | Añadido al `AndroidManifest.xml`. Sin él, en Android 13+ las notificaciones no se muestran. |
 | **Llave de firma** | Se importa en un keychain temporal del runner y se borra al terminar. El runner no guarda nada. |

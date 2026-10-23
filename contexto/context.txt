@@ -103,7 +103,8 @@ DataConnect/dataconnect/    Schema + connector de Firebase Data Connect
 
 firebase.json               dataconnect + functions (DataConnect/api) + hosting
 contexto/                   Este documento + el manifiesto original
-RapiMesaApp/                Legacy .NET MAUI (conservado, ya no se toca)
+                              (el antiguo RapiMesaApp/ de .NET MAUI se eliminó:
+                               quedó reemplazado por completo por RapiMesaFlutter)
 ```
 
 ### 2.1 Firebase (verificado)
@@ -641,7 +642,8 @@ originales 61-308). Resumen por fases:
 
 1. **Fase inicial (MAUI).** Node/Express + Data Connect + PostgreSQL en Cloud SQL,
    Firebase Auth con Custom Claims, Swagger, `MenuCategoriesPage.xaml`.
-2. **Migración a Flutter** (09/Oct/2026). Se conserva `RapiMesaApp/` por si acaso.
+2. **Migración a Flutter** (09/Oct/2026). `RapiMesaApp/` (MAUI) quedó obsoleto y
+   se eliminó del repo el 23/Oct/2026; solo vive en el historial de git.
 3. **Rediseño gastronómico** (paleta carbón/terracota, carrusel 3D, autoplay,
    modal de extras obligatorio antes de sumar al carrito).
 4. **Multiroles en tiempo real**: `RestaurantOrdersManager` + `KitchenView` +

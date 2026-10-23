@@ -161,11 +161,73 @@ equipo)
   echo "(sale del propio certificado: CN=Apple Distribution: JOSE ALBERTO DE LA CRUZ SOLANO (3XW2235F4W))"
   ;;
 
+perfil)
+  # Instala un .mobileprovision como <UUID>.mobileprovision, que es el nombre
+  # que espera Xcode, y comprueba que sirve para ESTA app (Team ID, bundle id,
+  # APNs de producción y fecha de caducidad).
+  PERFIL="${2:-}"
+  if [ -z "$PERFIL" ]; then
+    for f in "$CSR_DIR"/*.mobileprovision "$HOME/Downloads"/*.mobileprovision; do
+      [ -f "$f" ] && PERFIL="$f" && break
+    done
+  fi
+  [ -n "$PERFIL" ] && [ -f "$PERFIL" ] || {
+    echo "❌ No encuentro ningún .mobileprovision."
+    echo "   Uso: $0 perfil /ruta/al/RapiMesa_AppStore.mobileprovision"
+    exit 1
+  }
+
+  TMP_PLIST=$(mktemp)
+  if ! security cms -D -i "$PERFIL" > "$TMP_PLIST" 2>/dev/null; then
+    echo "❌ $PERFIL no es un .mobileprovision válido."
+    rm -f "$TMP_PLIST"; exit 1
+  fi
+
+  P_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$TMP_PLIST")
+  P_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$TMP_PLIST")
+  P_TEAM=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$TMP_PLIST")
+  P_APPID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$TMP_PLIST")
+  P_APS=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:aps-environment' "$TMP_PLIST" 2>/dev/null || echo "(sin APNs)")
+  P_EXP=$(/usr/libexec/PlistBuddy -c 'Print :ExpirationDate' "$TMP_PLIST")
+
+  echo "Perfil : $P_NAME"
+  echo "UUID   : $P_UUID"
+  echo "Team   : $P_TEAM"
+  echo "App ID : $P_APPID"
+  echo "APNs   : $P_APS"
+  echo "Caduca : $P_EXP"
+
+  if [ "$P_TEAM" != "3XW2235F4W" ]; then
+    echo "❌ El perfil es de otro equipo ($P_TEAM), no 3XW2235F4W."
+    rm -f "$TMP_PLIST"; exit 1
+  fi
+  if [ "$P_APPID" != "3XW2235F4W.com.rapimesa.app" ]; then
+    echo "❌ El perfil es para '$P_APPID' y no para 3XW2235F4W.com.rapimesa.app."
+    echo "   Regístralo para el App ID com.rapimesa.app."
+    rm -f "$TMP_PLIST"; exit 1
+  fi
+  if [ "$P_NAME" != "RapiMesa AppStore" ]; then
+    echo "⚠️  El perfil se llama '$P_NAME'. El proyecto espera 'RapiMesa AppStore':"
+    echo "   renómbralo en developer.apple.com (Edit → nombre) y vuelve a descargarlo,"
+    echo "   o actualiza PROVISIONING_PROFILE_SPECIFIER en project.pbxproj."
+  fi
+
+  DEST="$HOME/Library/MobileDevice/Provisioning Profiles"
+  mkdir -p "$DEST"
+  cp "$PERFIL" "$DEST/$P_UUID.mobileprovision"
+  rm -f "$TMP_PLIST"
+  echo
+  echo "✅ Instalado en $DEST/$P_UUID.mobileprovision"
+  echo "   Siguiente:  cd $PWD && flutter build ipa --release --export-options-plist=ios/ExportOptions.plist"
+  echo "   Y para GitHub:  $0 base64   (copia el bloque del .mobileprovision)"
+  ;;
+
 *)
-  echo "Uso: $0 {csr|exportar|base64|equipo}"
+  echo "Uso: $0 {csr|exportar|perfil|base64|equipo}"
   echo
   echo "  csr       Genera el CSR para subirlo en el portal de Apple"
   echo "  exportar  Instala el .cer, arma el .p12 y verifica la identidad"
+  echo "  perfil    Instala y valida un .mobileprovision (opcional: ruta)"
   echo "  base64    Codifica cert.p12 y el .mobileprovision para GitHub"
   echo "  equipo    Muestra el Team ID"
   ;;
