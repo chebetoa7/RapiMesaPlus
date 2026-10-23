@@ -26,13 +26,12 @@ name: iOS TestFlight
 #      APP_STORE_CONNECT_KEY_ID  → Key ID (10 caracteres)
 #      APP_STORE_CONNECT_ISSUER_ID → Issuer ID (UUID)
 #
-# ⚠️  OJO con el bundle id: el proyecto usa "com.example.rapimesaFlutter",
-#    que Apple NO acepta (el prefijo com.example está reservado). Para
-#    subir a TestFlight hay que cambiarlo por uno propio en los 3 sitios:
-#      - ios/Runner.xcodeproj/project.pbxproj
-#      - ios/Runner/GoogleService-Info.plist  (BUNDLE_ID)
-#      - lib/firebase_options.dart             (ios > bundleId)
-#    y registrar ese App ID en Apple Developer + en la consola de Firebase.
+# ⚠️  OJO con el bundle id: el proyecto usa "com.rapimesa.app" (Apple no acepta
+#    el prefijo com.example, está reservado). Debe coincidir en los 3 sitios:
+#      - ios/Runner.xcodeproj/project.pbxproj  (PRODUCT_BUNDLE_IDENTIFIER)
+#      - ios/Runner/GoogleService-Info.plist   (BUNDLE_ID)
+#      - lib/firebase_options.dart             (ios > iosBundleId)
+#    y estar registrado en Apple Developer + en la consola de Firebase.
 
 on:
   push:
@@ -122,26 +121,33 @@ jobs:
           # ───────────────────────────────────────────────────────────────────
           rm -f "$KEYCHAIN" "$KEYCHAIN-db"
           security create-keychain -p actions "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p actions "$KEYCHAIN"
 
           security import "$RUNNER_TEMP/cert.p12" \
             -k "$KEYCHAIN" \
+            -f pkcs12 \
             -P "$APPLE_CERT_PASSWORD" \
-            -A
+            -T /usr/bin/codesign \
+            -T /usr/bin/xcrun \
+            -T /usr/bin/security 2> "$RUNNER_TEMP/import.err"
           IMPORT_OK=$?
 
           if [ $IMPORT_OK -ne 0 ]; then
-            echo "::warning::El primer import falló (código $IMPORT_OK). Reintentando."
+            echo "::warning::El primer import falló (código $IMPORT_OK): $(cat "$RUNNER_TEMP/import.err")"
             security unlock-keychain -p actions "$KEYCHAIN" || true
             security import "$RUNNER_TEMP/cert.p12" \
               -k "$KEYCHAIN" \
+              -f pkcs12 \
               -P "$APPLE_CERT_PASSWORD" \
-              -A
+              -T /usr/bin/codesign \
+              -T /usr/bin/xcrun \
+              -T /usr/bin/security 2> "$RUNNER_TEMP/import.err"
             IMPORT_OK=$?
           fi
 
           if [ $IMPORT_OK -ne 0 ]; then
-            echo "::error::No se pudo importar el .p12 en el keychain del runner."
+            echo "::error::No se pudo importar el .p12 en el keychain del runner: $(cat "$RUNNER_TEMP/import.err")"
             echo "::error::Suele ser que el secreto APPLE_CERT_P12 está truncado o que la contraseña no es la del .p12."
             exit 1
           fi
@@ -158,6 +164,11 @@ jobs:
             -S apple-tool:,apple:,codesign: \
             -s -k actions "$KEYCHAIN" || true
 
+          # AÑADIR A LA LISTA DE BÚSQUEDA (no cambiar el keychain por defecto):
+          # si el keychain no está en la lista, xcodebuild/codesign no ven la
+          # identidad y falla con "No signing certificate found".
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+
           echo "--- identidades de firma en el runner ---"
           security find-identity -v -p codesigning "$KEYCHAIN"
           if ! security find-identity -v -p codesigning "$KEYCHAIN" | grep -q "Apple Distribution"; then
@@ -169,12 +180,51 @@ jobs:
           echo "✅ Certificado importado y verificado"
 
       - name: Instalar perfil de provisión
+        env:
+          APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
         run: |
-          set -euo pipefail
-          echo "${{ secrets.APPLE_PROVISIONING_PROFILE }}" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision
+          set -uo pipefail
+
+          if ! printf '%s' "$APPLE_PROVISIONING_PROFILE" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision" 2>/dev/null; then
+            echo "::error::El secreto APPLE_PROVISIONING_PROFILE no es base64 válido."
+            exit 1
+          fi
+
+          # El perfil se instala con el nombre <UUID>.mobileprovision: es lo que
+          # espera Xcode. Un nombre arbitrario a veces no lo detecta.
+          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist" 2>/dev/null || {
+            echo "::error::El archivo decodificado no es un .mobileprovision válido."
+            exit 1
+          }
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/profile.plist")
+          PROFILE_APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/profile.plist")
+
+          echo "Perfil: $PROFILE_NAME ($PROFILE_UUID)"
+          echo "App ID: $PROFILE_APP_ID"
+
+          if [ -z "$PROFILE_UUID" ] || [ -z "$PROFILE_NAME" ]; then
+            echo "::error::El perfil no tiene UUID o Name; el archivo está corrupto."
+            exit 1
+          fi
+
+          if [ "$PROFILE_NAME" != "RapiMesa AppStore" ]; then
+            echo "::error::El perfil se llama '$PROFILE_NAME' pero project.pbxproj y ExportOptions.plist esperan 'RapiMesa AppStore'."
+            echo "::error::O renombras el perfil en developer.apple.com y lo vuelves a descargar, o actualizas PROVISIONING_PROFILE_SPECIFIER."
+            exit 1
+          fi
+
+          if [ "$PROFILE_APP_ID" != "3XW2235F4W.com.rapimesa.app" ]; then
+            echo "::error::El perfil es para '$PROFILE_APP_ID' y no para 3XW2235F4W.com.rapimesa.app."
+            echo "::error::Crea el perfil de tipo App Store para el App ID com.rapimesa.app."
+            exit 1
+          fi
+
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          cp "$RUNNER_TEMP/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/"
-          rm -f "$RUNNER_TEMP/profile.mobileprovision"
+          cp "$RUNNER_TEMP/profile.mobileprovision" \
+            "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          rm -f "$RUNNER_TEMP/profile.mobileprovision" "$RUNNER_TEMP/profile.plist"
+          echo "✅ Perfil instalado"
 
       - name: Comprobar el bundle id
         run: |
@@ -192,12 +242,17 @@ jobs:
         run: |
           set -euo pipefail
           # Con un certificado de Distribution, APNs usa el endpoint de
-          # PRODUCCIÓN. Si el entitlement dice "development", la app se firma
-          # pero el push NO llega en TestFlight (se queda en el sandbox).
-          # En local (debug) se deja "development" a propósito.
-          sed -i '' 's|<string>development</string>|<string>production</string>|' \
-            ios/Runner/Runner.entitlements
-          grep -A1 'aps-environment' ios/Runner/Runner.entitlements || true
+          # PRODUCCIÓN. El perfil de App Store solo autoriza "production": si
+          # el binario pide "development", codesign falla con
+          # "entitlements are not permitted".
+          #
+          # El repo ya trae "production". Este paso solo AVISA si alguien lo
+          # dejó en "development" para depurar el push en local (y lo subió).
+          if ! grep -A1 'aps-environment' ios/Runner/Runner.entitlements | grep -q 'production'; then
+            echo "::error::Runner.entitlements tiene aps-environment = development; un IPA de App Store no se puede firmar así. Cámbialo a production."
+            exit 1
+          fi
+          echo "✅ aps-environment = production"
 
       - name: Firmar y exportar IPA
         run: |
@@ -223,21 +278,36 @@ jobs:
 
       - name: Subir a TestFlight
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.upload == true }}
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
         run: |
           set -euo pipefail
-          echo "${{ secrets.APP_STORE_CONNECT_KEY_P8 }}" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+          if [ -z "${ASC_KEY_ID:-}" ] || [ -z "${ASC_ISSUER_ID:-}" ] || [ -z "${ASC_KEY_P8:-}" ]; then
+            echo "::error::Faltan los secretos APP_STORE_CONNECT_KEY_ID / _ISSUER_ID / _P8."
+            exit 1
+          fi
+
+          # altool busca la llave en ~/.appstoreconnect/private_keys con el
+          # nombre AuthKey_<KEY_ID>.p8. Si está en otro sitio, la ignora.
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s' "$ASC_KEY_P8" | base64 --decode \
+            > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+
+          IPA=$(ls build/ios/ipa/*.ipa | head -1)
+          echo "Subiendo $IPA"
           xcrun altool --upload-app \
-            -f build/ios/ipa/*.ipa \
+            -f "$IPA" \
             -t ios \
-            --apiKey "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" \
-            --apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
-        env:
-          KEYCHAIN_PATH: ${{ runner.temp }}/build.keychain
+            --apiKey "$ASC_KEY_ID" \
+            --apiIssuer "$ASC_ISSUER_ID"
 
       - name: Limpiar
         if: always()
         run: |
-          security delete-keychain build.keychain || true
+          security delete-keychain "$RUNNER_TEMP/build.keychain" || true
+          rm -rf "$HOME/.appstoreconnect" || true
           rm -f "$RUNNER_TEMP/AuthKey.p8" || true
 
       - name: Resumen
